@@ -47,3 +47,4 @@ Web app to grab frames from a video of a theatre performance and keep a record o
 - Clear button removes all captures, with confirmation
 - If IndexedDB is unavailable, a warning shows in the header and closing the tab asks for confirmation
 - Browser storage is not guaranteed: Chrome returns `false` to `navigator.storage.persist()` on `file://`. The JSON session is the durable record
+- Autosave confirmed working in the user's Firefox on file:// (reload keeps everything). Automated tests run in Chrome only

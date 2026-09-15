@@ -215,6 +215,8 @@
     padding: 12px;
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    /* Rows as tall as their card: with overflow hidden on the cards, auto rows shrink to fit the view instead of scrolling. */
+    grid-auto-rows: max-content;
     gap: 12px;
     align-content: start;
   }
