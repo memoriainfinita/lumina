@@ -110,6 +110,45 @@
   .thumb:hover .remove, .thumb .remove:focus-visible { opacity: 1; }
   .thumb .remove:hover { color: var(--accent); }
 
+  #help {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, .7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    z-index: 30;
+  }
+  .help-panel {
+    width: 100%;
+    max-width: 560px;
+    max-height: 100%;
+    overflow-y: auto;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 12px 20px 20px;
+  }
+  .help-head { display: flex; justify-content: space-between; align-items: center; }
+  .help-panel h2 { margin: 0; font-size: 18px; }
+  .help-panel h3 { margin: 16px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); }
+  .help-panel dl { display: grid; grid-template-columns: 11em 1fr; gap: 6px 16px; margin: 0; }
+  .help-panel dt { white-space: nowrap; color: var(--muted); }
+  .help-panel dd { margin: 0; }
+  kbd {
+    display: inline-block;
+    min-width: 1.8em;
+    padding: 1px 6px;
+    font: 12px/1.5 system-ui, sans-serif;
+    text-align: center;
+    color: var(--text);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+  }
+
   #toast {
     position: fixed;
     left: 50%;
@@ -146,9 +185,13 @@
     gap: 4px;
     padding: 6px;
   }
-  .thumb .fields input { width: 100%; min-width: 0; padding: 3px 6px; font-size: 13px; }
+  .thumb .fields input, .thumb .fields textarea { width: 100%; min-width: 0; padding: 3px 6px; font-size: 13px; }
   .thumb .fields .cue { color: var(--accent); font-weight: 600; }
   .thumb .fields .description { grid-column: 1 / -1; }
+  /* Contact sheet: cue on its own line, title and description wrap and grow instead of cutting text. */
+  .grid .thumb .fields { grid-template-columns: 6em 1fr; }
+  .grid .thumb .fields .title { grid-column: 1 / -1; }
+  .grid .thumb .fields textarea { resize: none; overflow: hidden; line-height: 1.35; }
   .thumb .time {
     grid-column: 1 / -1;
     justify-self: start;
@@ -227,6 +270,7 @@
   <span id="storage-warning" hidden>Not saved in this browser: save the session before closing</span>
   <span class="spacer"></span>
   <span id="info"></span>
+  <button id="help-open" title="Shortcuts (?)">?</button>
   <button id="tab-capture" class="active">Capture</button>
   <button id="tab-contacts">Contacts (0)</button>
   <input id="video-input" type="file" accept="video/*" hidden>
@@ -251,7 +295,7 @@
       </span>
       <label>fps <select id="fps"></select></label>
       <button id="capture" class="primary" title="Capture (C)" disabled>Capture</button>
-      <span class="hint">L play, faster &middot; J slower, pause, frame back &middot; K pause &middot; K+J/L or Left/Right frame &middot; Shift+Left/Right 1 s &middot; Ctrl+Left/Right 5 s &middot; I set in &middot; Space play &middot; C capture</span>
+      <span class="hint">Press ? for shortcuts</span>
     </div>
     <div id="strip" class="strip"></div>
   </section>
@@ -260,6 +304,52 @@
     <div id="grid" class="grid"></div>
   </section>
 </main>
+
+<div id="help" hidden>
+  <div class="help-panel" role="dialog" aria-labelledby="help-title">
+    <div class="help-head">
+      <h2 id="help-title">Shortcuts</h2>
+      <button id="help-close" title="Close (Esc)">&times;</button>
+    </div>
+    <h3>Playback</h3>
+    <dl>
+      <dt><kbd>L</kbd></dt><dd>Play forward; press again for 2x, 4x, 8x</dd>
+      <dt><kbd>J</kbd></dt><dd>Slower; at 1x pauses; when paused, one frame back</dd>
+      <dt><kbd>K</kbd></dt><dd>Pause and reset to 1x</dd>
+      <dt><kbd>Space</kbd></dt><dd>Play / pause</dd>
+    </dl>
+    <h3>Navigation</h3>
+    <dl>
+      <dt><kbd>&larr;</kbd> <kbd>&rarr;</kbd></dt><dd>One frame</dd>
+      <dt><kbd>K</kbd> held + <kbd>J</kbd> <kbd>L</kbd></dt><dd>One frame back / forward</dd>
+      <dt><kbd>Shift</kbd> + <kbd>&larr;</kbd> <kbd>&rarr;</kbd></dt><dd>1 second</dd>
+      <dt><kbd>Ctrl</kbd> + <kbd>&larr;</kbd> <kbd>&rarr;</kbd></dt><dd>5 seconds</dd>
+    </dl>
+    <h3>Capture</h3>
+    <dl>
+      <dt><kbd>C</kbd></dt><dd>Capture the current frame</dd>
+      <dt><kbd>I</kbd></dt><dd>Set the in point at the current frame</dd>
+    </dl>
+    <h3>Captures</h3>
+    <dl>
+      <dt>Click image</dt><dd>Open in the lightbox</dd>
+      <dt>Click time</dt><dd>Move the video to that frame</dd>
+      <dt>&times;</dt><dd>Delete</dd>
+      <dt><kbd>Ctrl</kbd> + <kbd>Z</kbd></dt><dd>Undo the last delete</dd>
+      <dt><kbd>Enter</kbd></dt><dd>Leave a text field so shortcuts work again</dd>
+    </dl>
+    <h3>Lightbox</h3>
+    <dl>
+      <dt><kbd>&larr;</kbd> <kbd>&rarr;</kbd></dt><dd>Previous / next capture</dd>
+      <dt><kbd>Delete</kbd></dt><dd>Delete the capture</dd>
+      <dt><kbd>Esc</kbd></dt><dd>Close</dd>
+    </dl>
+    <h3>General</h3>
+    <dl>
+      <dt><kbd>?</kbd></dt><dd>Show / hide this list</dd>
+    </dl>
+  </div>
+</div>
 
 <div id="toast" hidden>
   <span id="toast-text"></span>
@@ -874,9 +964,11 @@ async function capture() {
   const canvas = document.createElement('canvas');
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
+  // Read the time together with the draw: encoding takes a while and the video may move meanwhile.
+  const time = video.currentTime;
   canvas.getContext('2d').drawImage(video, 0, 0);
   const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', JPEG_QUALITY));
-  const c = addCapture({ cue: '', title: '', description: '', notes: '', time: video.currentTime, blob });
+  const c = addCapture({ cue: '', title: '', description: '', notes: '', time, blob });
   scheduleSave(c, true);
   render();
   document.querySelector(`#strip [data-id="${c.id}"]`)?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
@@ -934,7 +1026,18 @@ function goToCapture(c) {
 
 // ---------- rendering ----------
 
-function thumb(c) {
+function autosize(textarea) {
+  textarea.style.height = 'auto';
+  textarea.style.height = `${textarea.scrollHeight + 2}px`;
+}
+
+// Grows the contact sheet text fields to their content; they measure 0 while the view is hidden.
+function autosizeGrid() {
+  if ($('#view-contacts').hidden) return;
+  for (const textarea of document.querySelectorAll('#grid textarea')) autosize(textarea);
+}
+
+function thumb(c, wrapping = false) {
   const el = document.createElement('div');
   el.className = 'thumb';
   el.dataset.id = c.id;
@@ -952,7 +1055,9 @@ function thumb(c) {
   const fields = document.createElement('div');
   fields.className = 'fields';
   for (const [field, placeholder] of [['cue', 'Cue'], ['title', 'Title'], ['description', 'Description']]) {
-    const input = document.createElement('input');
+    const multiline = wrapping && field !== 'cue';
+    const input = document.createElement(multiline ? 'textarea' : 'input');
+    if (multiline) input.rows = 1;
     input.className = field;
     input.dataset.field = field;
     input.placeholder = placeholder;
@@ -963,9 +1068,12 @@ function thumb(c) {
       for (const twin of document.querySelectorAll(`.thumb[data-id="${c.id}"] [data-field="${field}"]`)) {
         if (twin !== input) twin.value = input.value;
       }
+      if (multiline) autosize(input);
     });
     // Enter leaves the field so the keyboard shortcuts work again.
-    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+    });
     fields.append(input);
   }
   const time = document.createElement('button');
@@ -989,8 +1097,9 @@ function thumb(c) {
 function render() {
   const strip = $('#strip');
   const grid = $('#grid');
-  strip.replaceChildren(...state.captures.map(thumb));
-  grid.replaceChildren(...state.captures.map(thumb));
+  strip.replaceChildren(...state.captures.map((c) => thumb(c)));
+  grid.replaceChildren(...state.captures.map((c) => thumb(c, true)));
+  autosizeGrid();
   if (!state.captures.length) {
     const empty = document.createElement('div');
     empty.className = 'empty';
@@ -1047,7 +1156,10 @@ function showView(name) {
   $('#view-contacts').hidden = name !== 'contacts';
   $('#tab-capture').classList.toggle('active', name === 'capture');
   $('#tab-contacts').classList.toggle('active', name === 'contacts');
-  if (name === 'contacts') video.pause();
+  if (name === 'contacts') {
+    video.pause();
+    autosizeGrid();
+  }
 }
 
 // ---------- lightbox ----------
@@ -1147,8 +1259,35 @@ document.addEventListener('click', (e) => {
 
 $('#toast-undo').addEventListener('click', undoDelete);
 
+function openHelp() {
+  video.pause();
+  $('#help').hidden = false;
+}
+
+function closeHelp() {
+  $('#help').hidden = true;
+}
+
+$('#help-open').addEventListener('click', openHelp);
+$('#help-close').addEventListener('click', closeHelp);
+$('#help').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closeHelp();
+});
+
 window.addEventListener('keydown', (e) => {
   const typing = e.target.matches('input, textarea, select');
+
+  // The shortcut list takes every key while open.
+  if (!$('#help').hidden) {
+    if (e.key === 'Escape' || e.key === '?') closeHelp();
+    e.preventDefault();
+    return;
+  }
+  if (e.key === '?' && !typing) {
+    e.preventDefault();
+    openHelp();
+    return;
+  }
 
   // Ctrl+Z restores the last deleted capture; inside a text field it stays text undo.
   if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z' && !typing && undoStack.length) {
@@ -1215,6 +1354,8 @@ window.addEventListener('drop', (e) => {
   if (file.name.toLowerCase().endsWith('.json')) openSession(file);
   else if (file.type.startsWith('video/') || /\.(mp4|m4v|mov)$/i.test(file.name)) loadVideo(file);
 });
+
+window.addEventListener('resize', autosizeGrid);
 
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) flushSaves();
