@@ -6,7 +6,7 @@ last_updated: 2026-09-15
 # lumina — project state
 
 ## Status
-Draft. v0 written in index.html, tested with a generated 29.97 fps mp4.
+Published on GitHub with GitHub Pages.
 
 ## What it is
 Web app to grab frames from a video of a theatre performance and keep a record of the show's lighting states.
