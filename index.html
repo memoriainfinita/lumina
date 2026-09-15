@@ -1,0 +1,792 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>lumina</title>
+<style>
+  :root {
+    --bg: #111;
+    --panel: #1b1b1b;
+    --line: #2c2c2c;
+    --text: #ddd;
+    --muted: #888;
+    --accent: #e0a526;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.4 system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+  }
+  button, select, input, textarea {
+    font: inherit;
+    color: var(--text);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+  }
+  button { padding: 6px 12px; cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--muted); }
+  button:disabled { opacity: .4; cursor: default; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #111; font-weight: 600; }
+  button.active { border-color: var(--accent); color: var(--accent); }
+  input, textarea, select { padding: 5px 8px; }
+  textarea { resize: vertical; }
+
+  header {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  header .brand { font-weight: 600; letter-spacing: .05em; margin-right: 8px; }
+  header .spacer { flex: 1; }
+  #info { color: var(--muted); }
+
+  main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+  #stage {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #000;
+    position: relative;
+  }
+  #stage video { max-width: 100%; max-height: 100%; }
+  #empty { color: var(--muted); text-align: center; padding: 24px; }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    padding: 8px 12px;
+    border-top: 1px solid var(--line);
+  }
+  #timecode { font-variant-numeric: tabular-nums; min-width: 9ch; }
+  .hint { color: var(--muted); font-size: 12px; }
+
+  .strip {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 8px 12px;
+    border-top: 1px solid var(--line);
+    min-height: 104px;
+  }
+  .strip .thumb { flex: 0 0 auto; width: 140px; }
+
+  .thumb {
+    padding: 0;
+    text-align: left;
+    background: var(--panel);
+    overflow: hidden;
+  }
+  .thumb img {
+    display: block;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    object-fit: contain;
+    background: #000;
+  }
+  .thumb .label {
+    padding: 4px 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .thumb .label .cue { color: var(--accent); font-weight: 600; }
+  .thumb .time { padding: 0 6px 4px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+  .grid {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 12px;
+    align-content: start;
+  }
+  .grid .empty { color: var(--muted); }
+
+  #lightbox {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, .92);
+    display: flex;
+    z-index: 10;
+  }
+  #lightbox .image {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px;
+  }
+  #lightbox .image img { max-width: 100%; max-height: 100%; }
+  #lightbox aside {
+    width: 320px;
+    max-width: 40vw;
+    background: var(--bg);
+    border-left: 1px solid var(--line);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow-y: auto;
+  }
+  #lightbox label { display: flex; flex-direction: column; gap: 2px; color: var(--muted); font-size: 12px; }
+  #lightbox .row { display: flex; gap: 8px; }
+  #lightbox .row > * { flex: 1; }
+  #lb-meta { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  @media (max-width: 700px) {
+    #lightbox { flex-direction: column; }
+    #lightbox aside { width: auto; max-width: none; border-left: 0; border-top: 1px solid var(--line); }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="brand">lumina</span>
+  <button id="open-video">Open video</button>
+  <button id="open-session">Open session</button>
+  <button id="save-session" disabled>Save session</button>
+  <button id="download-zip" disabled>Download all</button>
+  <span class="spacer"></span>
+  <span id="info"></span>
+  <button id="tab-capture" class="active">Capture</button>
+  <button id="tab-contacts">Contacts (0)</button>
+  <input id="video-input" type="file" accept="video/*" hidden>
+  <input id="session-input" type="file" accept=".json,application/json" hidden>
+</header>
+
+<main>
+  <section id="view-capture" class="view">
+    <div id="stage">
+      <div id="empty">Open a video or drop an mp4 here</div>
+      <video id="video" controls hidden></video>
+    </div>
+    <div class="controls">
+      <button id="step-back" title="Previous frame (Left)" disabled>&#9664; Frame</button>
+      <button id="step-forward" title="Next frame (Right)" disabled>Frame &#9654;</button>
+      <span id="timecode">00:00:00.00</span>
+      <label>fps <select id="fps"></select></label>
+      <button id="capture" class="primary" title="Capture (C)" disabled>Capture</button>
+      <span class="hint">Left/Right frame &middot; Shift+Left/Right 1 s &middot; Space play &middot; C capture</span>
+    </div>
+    <div id="strip" class="strip"></div>
+  </section>
+
+  <section id="view-contacts" class="view" hidden>
+    <div id="grid" class="grid"></div>
+  </section>
+</main>
+
+<div id="lightbox" hidden>
+  <div class="image"><img id="lb-img" alt=""></div>
+  <aside>
+    <div id="lb-meta"></div>
+    <label>Cue <input id="lb-cue" placeholder="12.5"></label>
+    <label>Title <input id="lb-title"></label>
+    <label>Description <textarea id="lb-description" rows="3"></textarea></label>
+    <label>Notes <textarea id="lb-notes" rows="5"></textarea></label>
+    <div class="row">
+      <button id="lb-prev">&#9664; Prev</button>
+      <button id="lb-next">Next &#9654;</button>
+    </div>
+    <div class="row">
+      <button id="lb-delete">Delete</button>
+      <button id="lb-close">Close</button>
+    </div>
+    <span class="hint">Left/Right navigate &middot; Delete removes &middot; Esc closes</span>
+  </aside>
+</div>
+
+<script>
+'use strict';
+
+const $ = (sel) => document.querySelector(sel);
+
+const STANDARD_FPS = [23.976, 24, 25, 29.97, 30, 50, 59.94, 60];
+const JPEG_QUALITY = 0.92;
+const TEXT_FIELDS = ['cue', 'title', 'description', 'notes'];
+
+const state = {
+  captures: [],      // { id, cue, title, description, notes, time, blob, url }
+  nextId: 1,
+  dirty: false,
+  videoBase: '',
+  fps: 25,
+  fpsSource: 'default',
+  lightbox: -1,
+};
+
+const video = $('#video');
+
+// ---------- formatting ----------
+
+function pad(n, width = 2) {
+  return String(n).padStart(width, '0');
+}
+
+function formatTime(t, forFile = false) {
+  const h = Math.floor(t / 3600);
+  const m = Math.floor((t % 3600) / 60);
+  const s = Math.floor(t % 60);
+  const f = Math.floor((t - Math.floor(t)) * state.fps + 1e-4);
+  return forFile
+    ? `${pad(h)}-${pad(m)}-${pad(s)}-${pad(f)}`
+    : `${pad(h)}:${pad(m)}:${pad(s)}.${pad(f)}`;
+}
+
+function sanitize(text) {
+  return text
+    .replace(/[\\/:*?"<>|\x00-\x1f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[. ]+$/, '');
+}
+
+function cueLabel(cue) {
+  const clean = sanitize(cue).replace(/^q\s*/i, '');
+  if (!clean) return '';
+  const match = clean.match(/^(\d+)(.*)$/);
+  return 'Q' + (match ? pad(match[1], 3) + match[2] : clean);
+}
+
+function fileBase(capture) {
+  const parts = [cueLabel(capture.cue), sanitize(capture.title)].filter(Boolean);
+  const base = parts.length ? parts.join('_') : formatTime(capture.time, true);
+  return base.slice(0, 120);
+}
+
+// ---------- mp4 frame rate ----------
+
+function fourcc(view, offset) {
+  return String.fromCharCode(
+    view.getUint8(offset), view.getUint8(offset + 1),
+    view.getUint8(offset + 2), view.getUint8(offset + 3));
+}
+
+function* boxes(view, start, end) {
+  let pos = start;
+  while (pos + 8 <= end) {
+    let size = view.getUint32(pos);
+    const type = fourcc(view, pos + 4);
+    let header = 8;
+    if (size === 1) {
+      size = Number(view.getBigUint64(pos + 8));
+      header = 16;
+    } else if (size === 0) {
+      size = end - pos;
+    }
+    if (size < header || pos + size > end) return;
+    yield { type, start: pos + header, end: pos + size };
+    pos += size;
+  }
+}
+
+function childBox(view, parent, type) {
+  if (!parent) return null;
+  for (const box of boxes(view, parent.start, parent.end)) {
+    if (box.type === type) return box;
+  }
+  return null;
+}
+
+async function readMoov(file) {
+  let pos = 0;
+  while (pos + 8 <= file.size) {
+    const head = new DataView(await file.slice(pos, pos + 16).arrayBuffer());
+    let size = head.getUint32(0);
+    const type = fourcc(head, 4);
+    let header = 8;
+    if (size === 1) {
+      if (head.byteLength < 16) return null;
+      size = Number(head.getBigUint64(8));
+      header = 16;
+    } else if (size === 0) {
+      size = file.size - pos;
+    }
+    if (size < header) return null;
+    if (type === 'moov') {
+      return new DataView(await file.slice(pos + header, pos + size).arrayBuffer());
+    }
+    pos += size;
+  }
+  return null;
+}
+
+async function detectFps(file) {
+  try {
+    const moov = await readMoov(file);
+    if (!moov) return null;
+    for (const trak of boxes(moov, 0, moov.byteLength)) {
+      if (trak.type !== 'trak') continue;
+      const mdia = childBox(moov, trak, 'mdia');
+      const hdlr = childBox(moov, mdia, 'hdlr');
+      if (!hdlr || fourcc(moov, hdlr.start + 8) !== 'vide') continue;
+
+      const mdhd = childBox(moov, mdia, 'mdhd');
+      const stts = childBox(moov, childBox(moov, childBox(moov, mdia, 'minf'), 'stbl'), 'stts');
+      if (!mdhd || !stts) return null;
+
+      const version = moov.getUint8(mdhd.start);
+      const timescale = moov.getUint32(mdhd.start + (version === 1 ? 20 : 12));
+      const entries = moov.getUint32(stts.start + 4);
+      let samples = 0;
+      let duration = 0;
+      for (let i = 0; i < entries; i++) {
+        const count = moov.getUint32(stts.start + 8 + i * 8);
+        const delta = moov.getUint32(stts.start + 12 + i * 8);
+        samples += count;
+        duration += count * delta;
+      }
+      if (!timescale || !duration) return null;
+      return { fps: samples * timescale / duration, variable: entries > 1 };
+    }
+  } catch (err) {
+    console.warn('lumina: could not read frame rate', err);
+  }
+  return null;
+}
+
+function setFps(value, source) {
+  const standard = STANDARD_FPS.find((f) => Math.abs(f - value) < 0.01);
+  state.fps = standard ?? Math.round(value * 1000) / 1000;
+  state.fpsSource = source;
+  renderFpsSelect();
+  renderInfo();
+}
+
+// ---------- zip (store, no compression) ----------
+
+const CRC_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+    table[n] = c >>> 0;
+  }
+  return table;
+})();
+
+function crc32(bytes) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+function makeZip(files) {
+  const encoder = new TextEncoder();
+  const now = new Date();
+  const dosTime = (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1);
+  const dosDate = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
+  const local = [];
+  const central = [];
+  let offset = 0;
+  let centralSize = 0;
+
+  for (const file of files) {
+    const name = encoder.encode(file.name);
+    const size = file.data.length;
+    const crc = crc32(file.data);
+
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0, 0x04034b50, true);
+    lh.setUint16(4, 20, true);
+    lh.setUint16(6, 0x0800, true);          // UTF-8 file names
+    lh.setUint16(8, 0, true);               // store
+    lh.setUint16(10, dosTime, true);
+    lh.setUint16(12, dosDate, true);
+    lh.setUint32(14, crc, true);
+    lh.setUint32(18, size, true);
+    lh.setUint32(22, size, true);
+    lh.setUint16(26, name.length, true);
+    lh.setUint16(28, 0, true);
+    local.push(lh, name, file.data);
+
+    const cd = new DataView(new ArrayBuffer(46));
+    cd.setUint32(0, 0x02014b50, true);
+    cd.setUint16(4, 20, true);
+    cd.setUint16(6, 20, true);
+    cd.setUint16(8, 0x0800, true);
+    cd.setUint16(10, 0, true);
+    cd.setUint16(12, dosTime, true);
+    cd.setUint16(14, dosDate, true);
+    cd.setUint32(16, crc, true);
+    cd.setUint32(20, size, true);
+    cd.setUint32(24, size, true);
+    cd.setUint16(28, name.length, true);
+    cd.setUint32(42, offset, true);
+    central.push(cd, name);
+
+    offset += 30 + name.length + size;
+    centralSize += 46 + name.length;
+  }
+
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true);
+  end.setUint16(8, files.length, true);
+  end.setUint16(10, files.length, true);
+  end.setUint32(12, centralSize, true);
+  end.setUint32(16, offset, true);
+
+  return new Blob([...local, ...central, end], { type: 'application/zip' });
+}
+
+// ---------- files ----------
+
+function download(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+}
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+function dataUrlToBlob(dataUrl) {
+  const [head, body] = dataUrl.split(',');
+  const mime = (head.match(/^data:([^;]+)/) || [])[1] || 'image/jpeg';
+  const binary = atob(body);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+}
+
+async function loadVideo(file) {
+  video.src = URL.createObjectURL(file);
+  video.hidden = false;
+  $('#empty').hidden = true;
+  state.videoBase = file.name.replace(/\.[^.]+$/, '');
+  const detected = await detectFps(file);
+  if (detected) setFps(detected.fps, detected.variable ? 'file, variable' : 'file');
+  else setFps(state.fps, 'not detected');
+}
+
+async function saveSession() {
+  const session = {
+    app: 'lumina',
+    format: 1,
+    video: state.videoBase,
+    fps: state.fps,
+    captures: await Promise.all(state.captures.map(async (c) => ({
+      cue: c.cue,
+      title: c.title,
+      description: c.description,
+      notes: c.notes,
+      time: c.time,
+      image: await blobToDataUrl(c.blob),
+    }))),
+  };
+  download(new Blob([JSON.stringify(session)], { type: 'application/json' }),
+    `${state.videoBase || 'lumina'}_lumina.json`);
+  state.dirty = false;
+}
+
+async function openSession(file) {
+  let session;
+  try {
+    session = JSON.parse(await file.text());
+  } catch {
+    alert('This file is not valid JSON.');
+    return;
+  }
+  if (session.app !== 'lumina' || !Array.isArray(session.captures)) {
+    alert('This file is not a lumina session.');
+    return;
+  }
+  if (state.dirty && state.captures.length &&
+      !confirm('Replace the current captures? Unsaved changes will be lost.')) {
+    return;
+  }
+  clearCaptures();
+  if (!video.src) state.videoBase = session.video || '';
+  if (session.fps) setFps(session.fps, 'session');
+  for (const c of session.captures) {
+    const blob = dataUrlToBlob(c.image);
+    addCapture({
+      cue: c.cue || '', title: c.title || '', description: c.description || '',
+      notes: c.notes || '', time: Number(c.time) || 0, blob,
+    });
+  }
+  state.dirty = false;
+  render();
+}
+
+async function downloadZip() {
+  const used = new Set();
+  const files = [];
+  for (const c of state.captures) {
+    const base = fileBase(c);
+    let name = `${base}.jpg`;
+    for (let n = 2; used.has(name.toLowerCase()); n++) name = `${base}_${n}.jpg`;
+    used.add(name.toLowerCase());
+    files.push({ name, data: new Uint8Array(await c.blob.arrayBuffer()) });
+  }
+  download(makeZip(files), `${state.videoBase || 'lumina'}_captures.zip`);
+}
+
+// ---------- captures ----------
+
+function addCapture(fields) {
+  const capture = { id: state.nextId++, ...fields, url: URL.createObjectURL(fields.blob) };
+  state.captures.push(capture);
+  state.captures.sort((a, b) => a.time - b.time || a.id - b.id);
+  return capture;
+}
+
+function clearCaptures() {
+  for (const c of state.captures) URL.revokeObjectURL(c.url);
+  state.captures = [];
+}
+
+async function capture() {
+  if (!video.videoWidth) return;
+  if (video.seeking) await new Promise((r) => video.addEventListener('seeked', r, { once: true }));
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', JPEG_QUALITY));
+  const c = addCapture({ cue: '', title: '', description: '', notes: '', time: video.currentTime, blob });
+  state.dirty = true;
+  render();
+  document.querySelector(`#strip [data-id="${c.id}"]`)?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+}
+
+function stepFrames(n) {
+  if (!video.duration) return;
+  video.pause();
+  const current = Math.floor(video.currentTime * state.fps + 1e-4);
+  const target = (current + n + 0.5) / state.fps;
+  video.currentTime = Math.min(Math.max(target, 0), video.duration);
+}
+
+function stepSeconds(s) {
+  if (!video.duration) return;
+  video.currentTime = Math.min(Math.max(video.currentTime + s, 0), video.duration);
+}
+
+// ---------- rendering ----------
+
+function thumb(c) {
+  const el = document.createElement('button');
+  el.className = 'thumb';
+  el.dataset.id = c.id;
+  const cue = cueLabel(c.cue);
+  const label = document.createElement('div');
+  label.className = 'label';
+  if (cue) {
+    const span = document.createElement('span');
+    span.className = 'cue';
+    span.textContent = cue.replace(/^Q0+(?=\d)/, 'Q');
+    label.append(span, c.title ? ' ' : '');
+  }
+  label.append(c.title || (cue ? '' : ' '));
+  const img = document.createElement('img');
+  img.src = c.url;
+  img.alt = '';
+  img.loading = 'lazy';
+  const time = document.createElement('div');
+  time.className = 'time';
+  time.textContent = formatTime(c.time);
+  el.append(img, label, time);
+  el.addEventListener('click', () => openLightbox(state.captures.indexOf(c)));
+  return el;
+}
+
+function render() {
+  const strip = $('#strip');
+  const grid = $('#grid');
+  strip.replaceChildren(...state.captures.map(thumb));
+  grid.replaceChildren(...state.captures.map(thumb));
+  if (!state.captures.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty';
+    empty.textContent = 'No captures yet.';
+    grid.append(empty);
+  }
+  const has = state.captures.length > 0;
+  $('#save-session').disabled = !has;
+  $('#download-zip').disabled = !has;
+  $('#tab-contacts').textContent = `Contacts (${state.captures.length})`;
+}
+
+function renderFpsSelect() {
+  const select = $('#fps');
+  const values = STANDARD_FPS.includes(state.fps) ? STANDARD_FPS : [...STANDARD_FPS, state.fps].sort((a, b) => a - b);
+  select.replaceChildren(...values.map((v) => new Option(String(v), String(v), false, v === state.fps)));
+}
+
+function renderInfo() {
+  const parts = [];
+  if (state.videoBase) parts.push(state.videoBase);
+  if (video.videoWidth) parts.push(`${video.videoWidth}×${video.videoHeight}`);
+  parts.push(`${state.fps} fps (${state.fpsSource})`);
+  $('#info').textContent = parts.join(' · ');
+}
+
+function renderTimecode() {
+  $('#timecode').textContent = formatTime(video.currentTime || 0);
+}
+
+function showView(name) {
+  $('#view-capture').hidden = name !== 'capture';
+  $('#view-contacts').hidden = name !== 'contacts';
+  $('#tab-capture').classList.toggle('active', name === 'capture');
+  $('#tab-contacts').classList.toggle('active', name === 'contacts');
+  if (name === 'contacts') video.pause();
+}
+
+// ---------- lightbox ----------
+
+function openLightbox(index) {
+  if (index < 0 || index >= state.captures.length) return;
+  state.lightbox = index;
+  const c = state.captures[index];
+  $('#lb-img').src = c.url;
+  $('#lb-meta').textContent = `${index + 1} / ${state.captures.length} · ${formatTime(c.time)}`;
+  for (const field of TEXT_FIELDS) $(`#lb-${field}`).value = c[field];
+  $('#lb-prev').disabled = index === 0;
+  $('#lb-next').disabled = index === state.captures.length - 1;
+  $('#lightbox').hidden = false;
+  video.pause();
+}
+
+function closeLightbox() {
+  state.lightbox = -1;
+  $('#lightbox').hidden = true;
+  document.activeElement?.blur();
+  render();
+}
+
+function deleteCurrent() {
+  const index = state.lightbox;
+  if (index < 0) return;
+  const [removed] = state.captures.splice(index, 1);
+  URL.revokeObjectURL(removed.url);
+  state.dirty = true;
+  if (!state.captures.length) closeLightbox();
+  else openLightbox(Math.min(index, state.captures.length - 1));
+}
+
+for (const field of TEXT_FIELDS) {
+  $(`#lb-${field}`).addEventListener('input', (e) => {
+    const c = state.captures[state.lightbox];
+    if (!c) return;
+    c[field] = e.target.value;
+    state.dirty = true;
+  });
+}
+
+// ---------- events ----------
+
+$('#open-video').addEventListener('click', () => $('#video-input').click());
+$('#open-session').addEventListener('click', () => $('#session-input').click());
+$('#video-input').addEventListener('change', (e) => {
+  if (e.target.files[0]) loadVideo(e.target.files[0]);
+  e.target.value = '';
+});
+$('#session-input').addEventListener('change', (e) => {
+  if (e.target.files[0]) openSession(e.target.files[0]);
+  e.target.value = '';
+});
+$('#save-session').addEventListener('click', saveSession);
+$('#download-zip').addEventListener('click', downloadZip);
+$('#tab-capture').addEventListener('click', () => showView('capture'));
+$('#tab-contacts').addEventListener('click', () => showView('contacts'));
+$('#step-back').addEventListener('click', () => stepFrames(-1));
+$('#step-forward').addEventListener('click', () => stepFrames(1));
+$('#capture').addEventListener('click', capture);
+$('#fps').addEventListener('change', (e) => setFps(Number(e.target.value), 'manual'));
+$('#lb-prev').addEventListener('click', () => openLightbox(state.lightbox - 1));
+$('#lb-next').addEventListener('click', () => openLightbox(state.lightbox + 1));
+$('#lb-delete').addEventListener('click', deleteCurrent);
+$('#lb-close').addEventListener('click', closeLightbox);
+
+video.addEventListener('loadedmetadata', () => {
+  for (const id of ['#step-back', '#step-forward', '#capture']) $(id).disabled = false;
+  renderInfo();
+  renderTimecode();
+});
+video.addEventListener('timeupdate', renderTimecode);
+video.addEventListener('seeked', renderTimecode);
+
+// Buttons keep no focus, so Space and arrows always reach the shortcuts.
+document.addEventListener('click', (e) => {
+  if (e.target.closest('header button, .controls button')) e.target.closest('button').blur();
+});
+
+window.addEventListener('keydown', (e) => {
+  const typing = e.target.matches('input, textarea, select');
+
+  if (state.lightbox >= 0) {
+    if (e.key === 'Escape') { e.preventDefault(); closeLightbox(); return; }
+    if (typing) return;
+    if (e.key === 'ArrowLeft') { e.preventDefault(); openLightbox(state.lightbox - 1); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); openLightbox(state.lightbox + 1); }
+    else if (e.key === 'Delete') { e.preventDefault(); deleteCurrent(); }
+    return;
+  }
+
+  if (typing || $('#view-capture').hidden || !video.duration) return;
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+    e.preventDefault();
+    const dir = e.key === 'ArrowLeft' ? -1 : 1;
+    if (e.shiftKey) stepSeconds(dir);
+    else stepFrames(dir);
+  } else if (e.key === ' ') {
+    e.preventDefault();
+    if (video.paused) video.play(); else video.pause();
+  } else if (e.key === 'c' || e.key === 'C') {
+    e.preventDefault();
+    capture();
+  }
+}, true);
+
+window.addEventListener('dragover', (e) => e.preventDefault());
+window.addEventListener('drop', (e) => {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (!file) return;
+  if (file.name.toLowerCase().endsWith('.json')) openSession(file);
+  else if (file.type.startsWith('video/') || /\.(mp4|m4v|mov)$/i.test(file.name)) loadVideo(file);
+});
+
+window.addEventListener('beforeunload', (e) => {
+  if (state.dirty && state.captures.length) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
+});
+
+renderFpsSelect();
+renderInfo();
+render();
+</script>
+</body>
+</html>
