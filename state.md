@@ -16,7 +16,7 @@ Web app to grab frames from a video of a theatre performance and keep a record o
 ## Design
 - Single HTML file, no server, no install. The video never leaves the machine
 - UI, code and documentation in English
-- Load an mp4 and play it with standard controls
+- Load an mp4 and play it with standard controls: Open video in the header, drop it on the window, or click the empty stage (only while no video is loaded, so clicks on the video still reach its controls)
 - Frame-by-frame stepping with the arrow keys, or K held + J/L
 - L plays forward, each further press speeds up: 1x, 2x, 4x, 8x
 - J steps down: one rate slower while faster than 1x, pause at 1x, one frame back when paused. No reverse playback: Chrome and Firefox do not support it
@@ -28,19 +28,28 @@ Web app to grab frames from a video of a theatre performance and keep a record o
 - Captures store the real video time, so moving the in point relabels them and Go to frame stays exact
 - The in point is kept in browser storage and in the JSON session; opening a different video resets it to 0
 - Capture the current frame at the video's native resolution, as JPG
-- Each capture has its own fields: cue, title, description, notes, all optional, plus the video timestamp
+- Each capture has its own fields: cue, title, description, notes, color, all optional, plus the video timestamp
 - Cue is a separate field because cues get renumbered. Decimals allowed: `12`, `12.5`
 - Captures are ordered by timestamp
-- Capture view: video and a strip of captures with editable cue, title and description
-- Contact sheet view: thumbnail grid with editable cue, title and description; notes only in the lightbox. Title and description wrap and the card grows, so no text is cut; the capture strip keeps single-line fields
+- One view: video and controls, a draggable splitter, and a grid of captures. The separate contact sheet view was removed: with a resizable grid it duplicated the capture strip
+- Layout: captures below the video or on its right (Options > Layout). The splitter sets the height or the width of the captures; the grid fits as many thumbnails as there is room for. Windows narrower than 700 px always put the captures below
+- Hide video: header button or V. Hides video, controls and splitter so the captures fill the view, and pauses the video. Go to frame and opening a video show it again
+- Thumbnail size: two sliders, with video (120-400 px) and without video (160-480 px)
+- Layout, splitter position, thumbnail sizes and hidden video are browser preferences in localStorage (`lumina-prefs`), not part of the session
+- Card: image with the time (click goes to the frame), a Notes flag when the capture has notes (hover shows them), × to delete and the color dot. Below: Q + cue and title on one line, description underneath. Title and description wrap and the card grows, so no text is cut. Notes are edited in the lightbox
+- The Q in front of the cue is drawn by the card; the stored value stays as typed
+- Colors: palette of 8 slots with editable color and name (Options > Colors). A capture takes a palette slot, a custom color or none, from the dot on the card or the row in the lightbox
+- A palette capture stores the slot (`p0`-`p7`), so editing the palette recolors it; a custom one stores `#rrggbb`
+- The palette belongs to the session: autosaved and in the JSON. Sessions without a palette open with the default one; Clear keeps it
+- Color shows only on the dot. A colored frame around the card was tried and dropped
 - Capture time is read at the moment the frame is drawn, before JPG encoding, so captures taken while playing or seeking are labelled with their own frame
 - Options panel: one modal with categories in a side menu, fixed size (720 x 520 px max); the content scrolls, the panel does not grow. Opens with the Options button (last section seen) or ? (straight to Shortcuts); Esc, ? or a click outside closes it. App shortcuts are off while open; Tab, Enter and Space work on its buttons
-- Options > Session: Open session, Save session, Download all, Clear. Each action closes the panel. The header keeps only Open video, the storage warning, Options and the view tabs
+- Options > Session: Open session, Save session, Download all, Clear. Each action closes the panel. The header keeps the storage warning, video info, capture count, Open video, Options and Hide video
 - Options > Shortcuts: read-only legend. Custom shortcuts planned for later
 - Favicon: `favicon.svg`, amber spotlight on a dark rounded square, checked rasterized at 16 and 32 px
 - Clicking a capture's timestamp, or Go to frame in the lightbox, moves the video to that frame (disabled when no video is loaded)
 - Lightbox: click a thumbnail; arrows to navigate, edit all fields, Delete key removes, Esc goes back
-- Delete from every view (× on each thumbnail, Delete in the lightbox) without confirmation: an Undo toast shows for 8 s and Ctrl+Z restores deletions one by one during the session. Clear keeps its confirmation
+- Delete without leaving the view (× on each thumbnail, Delete in the lightbox) without confirmation: an Undo toast shows for 8 s and Ctrl+Z restores deletions one by one during the session. Clear keeps its confirmation
 - Editing = the text fields only. Image retouching is out of scope
 - Download all: zip of images named `Q012.5_title.jpg`; without cue or title, the timestamp fills in
 - Zip written in-house, uncompressed (JPG is already compressed), so the app stays a single file with no dependencies

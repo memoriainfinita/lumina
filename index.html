@@ -13,6 +13,10 @@
     --text: #ddd;
     --muted: #888;
     --accent: #e0a526;
+    --strip-height: 260px;
+    --strip-width: 360px;
+    --thumb-with-video: 220px;
+    --thumb-without-video: 240px;
   }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
@@ -50,11 +54,32 @@
   }
   header .brand { font-weight: 600; letter-spacing: .05em; margin-right: 8px; }
   header .spacer { flex: 1; }
-  #info { color: var(--muted); }
+  #info, #count { color: var(--muted); }
   #storage-warning { color: var(--accent); }
 
   main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   .view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+  /* Capture view: video and controls, a draggable splitter, and the captures. Sizes come from the saved preferences. */
+  #capture-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+  #splitter {
+    flex: 0 0 6px;
+    background: var(--line);
+    cursor: row-resize;
+    touch-action: none;
+  }
+  #splitter:hover, #splitter.dragging { background: var(--accent); }
+  #strip { flex: 0 0 max(120px, min(var(--strip-height), calc(100% - 200px))); min-height: 0; }
+  /* Side by side only when there is room; narrow windows keep the captures below. */
+  @media (min-width: 701px) {
+    #view-capture.layout-side { flex-direction: row; }
+    .layout-side #splitter { cursor: col-resize; }
+    .layout-side #strip { flex-basis: max(120px, min(var(--strip-width), calc(100% - 320px))); min-width: 0; }
+  }
+  /* Video hidden: the captures take the whole view, with their own thumbnail size. */
+  #view-capture.video-hidden { flex-direction: column; }
+  #view-capture.video-hidden #strip { flex: 1 1 auto; }
+  .video-hidden .strip { grid-template-columns: repeat(auto-fill, minmax(min(var(--thumb-without-video), 100%), 1fr)); gap: 12px; padding: 12px; }
 
   #stage {
     flex: 1;
@@ -67,6 +92,9 @@
   }
   #stage video { max-width: 100%; max-height: 100%; }
   #empty { color: var(--muted); text-align: center; padding: 24px; }
+  /* No video yet: the whole stage opens the file dialog. */
+  #stage.no-video { cursor: pointer; }
+  #stage.no-video:hover #empty { color: var(--text); }
 
   .controls {
     display: flex;
@@ -80,13 +108,16 @@
   .hint { color: var(--muted); font-size: 12px; }
 
   .strip {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(var(--thumb-with-video), 100%), 1fr));
+    /* Rows as tall as their card: with overflow hidden on the cards, auto rows shrink to fit the view instead of scrolling. */
+    grid-auto-rows: max-content;
+    align-content: start;
     gap: 8px;
-    overflow-x: auto;
+    overflow-y: auto;
     padding: 8px 12px;
-    border-top: 1px solid var(--line);
   }
-  .strip .thumb { flex: 0 0 auto; width: 220px; }
+  .strip .empty { color: var(--muted); }
 
   .thumb {
     position: relative;
@@ -110,6 +141,64 @@
   }
   .thumb:hover .remove, .thumb .remove:focus-visible { opacity: 1; }
   .thumb .remove:hover { color: var(--accent); }
+  .thumb .color {
+    position: absolute;
+    right: 6px;
+    bottom: 7px;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    border: 2px solid rgba(255, 255, 255, .7);
+    border-radius: 50%;
+    background: var(--capture-color, rgba(0, 0, 0, .6));
+    opacity: .55;
+  }
+  .thumb:hover .color, .thumb .color:focus-visible, .thumb.colored .color { opacity: 1; }
+  /* Time and notes flag sit on the bottom left of the image. */
+  .thumb .frame { position: relative; }
+  .thumb .badges {
+    position: absolute;
+    left: 6px;
+    bottom: 6px;
+    display: flex;
+    gap: 4px;
+    align-items: center;
+  }
+  .thumb .badges > * {
+    padding: 1px 6px;
+    border: 0;
+    border-radius: 3px;
+    background: rgba(0, 0, 0, .65);
+    color: var(--text);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .thumb .notes-flag { color: var(--accent); cursor: default; }
+
+  .color-choices { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .color-choices .swatch {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 2px solid transparent;
+    border-radius: 50%;
+    background: var(--swatch);
+  }
+  .color-choices .swatch.selected { border-color: var(--text); }
+  .color-choices .none { padding: 2px 8px; font-size: 12px; }
+  .color-choices .none.selected { border-color: var(--text); }
+  .color-choices .custom { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
+  .color-choices .custom.selected { color: var(--text); }
+  .color-choices .custom input { width: 34px; height: 26px; padding: 0 2px; }
+  #color-menu {
+    position: fixed;
+    z-index: 40;
+    width: 204px;
+    padding: 8px;
+    background: var(--panel);
+    border: 1px solid var(--muted);
+    border-radius: 6px;
+  }
 
   #options {
     position: fixed;
@@ -144,6 +233,16 @@
   .options-panel dl { display: grid; grid-template-columns: 11em 1fr; gap: 6px 16px; margin: 0; }
   .options-panel dt { white-space: nowrap; color: var(--muted); }
   .options-panel dd { margin: 0; }
+  .option-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 8px 0; }
+  .option-row > span:first-child { min-width: 9em; color: var(--muted); }
+  .option-row input[type="range"] { flex: 1; min-width: 120px; max-width: 260px; padding: 0; border: 0; background: none; accent-color: var(--accent); }
+  .option-row output { min-width: 6ch; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .option-note { margin: 8px 0; color: var(--muted); font-size: 12px; }
+  #palette-editor { display: grid; gap: 6px; margin: 8px 0 12px; }
+  .palette-row { display: flex; gap: 8px; align-items: center; }
+  .palette-row .index { width: 1.5em; text-align: right; color: var(--muted); }
+  .palette-row input[type="color"] { width: 40px; height: 30px; padding: 2px; }
+  .palette-row input[type="text"] { flex: 1; min-width: 0; max-width: 280px; }
   @media (max-width: 560px) {
     .options-body { flex-direction: column; }
     .options-body nav { flex-direction: row; flex-wrap: wrap; }
@@ -191,48 +290,36 @@
     aspect-ratio: 16 / 9;
     object-fit: contain;
   }
+  /* Cue and title on the first line, description below. Title and description wrap and grow instead of cutting text. */
   .thumb .fields {
     display: grid;
-    grid-template-columns: 4.5em 1fr;
+    grid-template-columns: 5em 1fr;
+    align-items: start;
     gap: 4px;
     padding: 6px;
   }
   .thumb .fields input, .thumb .fields textarea { width: 100%; min-width: 0; padding: 3px 6px; font-size: 13px; }
-  .thumb .fields .cue { color: var(--accent); font-weight: 600; }
+  .thumb .fields textarea { resize: none; overflow: hidden; line-height: 1.35; }
   .thumb .fields .description { grid-column: 1 / -1; }
-  /* Contact sheet: cue on its own line, title and description wrap and grow instead of cutting text. */
-  .grid .thumb .fields { grid-template-columns: 6em 1fr; }
-  .grid .thumb .fields .title { grid-column: 1 / -1; }
-  .grid .thumb .fields textarea { resize: none; overflow: hidden; line-height: 1.35; }
-  .thumb .time {
-    grid-column: 1 / -1;
-    justify-self: start;
-    padding: 0 2px;
-    border: 0;
-    background: none;
+  .thumb .cue-box { position: relative; }
+  .thumb .cue-box::before {
+    content: 'Q';
+    position: absolute;
+    left: 6px;
+    top: 50%;
+    transform: translateY(-50%);
     color: var(--muted);
-    font-size: 12px;
-    font-variant-numeric: tabular-nums;
+    font-size: 13px;
+    pointer-events: none;
   }
+  .thumb .fields .cue { padding-left: 18px; color: var(--accent); font-weight: 600; }
+  .thumb .time { font-variant-numeric: tabular-nums; }
   .thumb .time:hover:not(:disabled) { color: var(--accent); text-decoration: underline; }
-  .thumb .time:disabled { opacity: 1; }
+  .thumb .time:disabled { opacity: 1; cursor: default; }
   #rate { color: var(--accent); font-weight: 600; min-width: 3ch; }
   .in-point { display: inline-flex; gap: 4px; align-items: center; }
   #in-point { width: 14ch; font-variant-numeric: tabular-nums; }
   #in-point.invalid { border-color: #c0392b; }
-
-  .grid {
-    flex: 1;
-    overflow-y: auto;
-    padding: 12px;
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    /* Rows as tall as their card: with overflow hidden on the cards, auto rows shrink to fit the view instead of scrolling. */
-    grid-auto-rows: max-content;
-    gap: 12px;
-    align-content: start;
-  }
-  .grid .empty { color: var(--muted); }
 
   #lightbox {
     position: fixed;
@@ -265,6 +352,8 @@
   #lightbox .row { display: flex; gap: 8px; }
   #lightbox .row > * { flex: 1; }
   #lb-meta { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .lb-color { display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: 12px; }
+  #lightbox .color-choices .custom { flex-direction: row; align-items: center; }
 
   @media (max-width: 700px) {
     #lightbox { flex-direction: column; }
@@ -276,21 +365,22 @@
 
 <header>
   <span class="brand">lumina</span>
-  <button id="open-video">Open video</button>
   <span id="storage-warning" hidden>Not saved in this browser: save the session before closing</span>
   <span class="spacer"></span>
   <span id="info"></span>
+  <span id="count"></span>
+  <button id="open-video">Open video</button>
   <button id="options-open" title="Options (?)">Options</button>
-  <button id="tab-capture" class="active">Capture</button>
-  <button id="tab-contacts">Contacts (0)</button>
+  <button id="toggle-video" title="Hide the video (V)">Hide video</button>
   <input id="video-input" type="file" accept="video/*" hidden>
   <input id="session-input" type="file" accept=".json,application/json" hidden>
 </header>
 
 <main>
   <section id="view-capture" class="view">
-    <div id="stage">
-      <div id="empty">Open a video or drop an mp4 here</div>
+    <div id="capture-main">
+    <div id="stage" class="no-video">
+      <div id="empty">Click or drop an mp4 here</div>
       <video id="video" controls hidden></video>
     </div>
     <div class="controls">
@@ -307,11 +397,9 @@
       <button id="capture" class="primary" title="Capture (C)" disabled>Capture</button>
       <span class="hint">Press ? for shortcuts</span>
     </div>
+    </div>
+    <div id="splitter" title="Drag to resize"></div>
     <div id="strip" class="strip"></div>
-  </section>
-
-  <section id="view-contacts" class="view" hidden>
-    <div id="grid" class="grid"></div>
   </section>
 </main>
 
@@ -324,6 +412,8 @@
     <div class="options-body">
     <nav>
       <button data-section="session" class="active">Session</button>
+      <button data-section="layout">Layout</button>
+      <button data-section="colors">Colors</button>
       <button data-section="shortcuts">Shortcuts</button>
     </nav>
     <section data-section="session">
@@ -331,6 +421,31 @@
       <button id="save-session" disabled>Save session</button>
       <button id="download-zip" disabled>Download all</button>
       <button id="clear" disabled>Clear</button>
+    </section>
+    <section data-section="layout" hidden>
+      <h3>Video and captures</h3>
+      <div class="option-row">
+        <span>Captures</span>
+        <button data-layout="bottom">Below the video</button>
+        <button data-layout="side">Right of the video</button>
+      </div>
+      <p class="option-note">Drag the bar between the video and the captures to resize. In narrow windows the captures always go below.</p>
+      <h3>Thumbnail size</h3>
+      <label class="option-row">
+        <span>With video</span>
+        <input id="thumb-with-video" type="range" min="120" max="400" step="10">
+        <output id="thumb-with-video-value"></output>
+      </label>
+      <label class="option-row">
+        <span>Without video</span>
+        <input id="thumb-without-video" type="range" min="160" max="480" step="10">
+        <output id="thumb-without-video-value"></output>
+      </label>
+    </section>
+    <section data-section="colors" hidden>
+      <p class="option-note">Each capture can take one of these colors or a custom one. The palette belongs to the session: it is autosaved and goes into the JSON file.</p>
+      <div id="palette-editor"></div>
+      <button id="palette-reset">Reset palette</button>
     </section>
     <section data-section="shortcuts" hidden>
     <h3>Playback</h3>
@@ -356,6 +471,7 @@
     <dl>
       <dt>Click image</dt><dd>Open in the lightbox</dd>
       <dt>Click time</dt><dd>Move the video to that frame</dd>
+      <dt>Dot, bottom right</dt><dd>Pick a color</dd>
       <dt>&times;</dt><dd>Delete</dd>
       <dt><kbd>Ctrl</kbd> + <kbd>Z</kbd></dt><dd>Undo the last delete</dd>
       <dt><kbd>Enter</kbd></dt><dd>Leave a text field so shortcuts work again</dd>
@@ -368,6 +484,7 @@
     </dl>
     <h3>General</h3>
     <dl>
+      <dt><kbd>V</kbd></dt><dd>Hide / show the video</dd>
       <dt><kbd>?</kbd></dt><dd>Show / hide this list</dd>
     </dl>
     </section>
@@ -380,6 +497,8 @@
   <button id="toast-undo" title="Ctrl+Z">Undo</button>
 </div>
 
+<div id="color-menu" hidden></div>
+
 <div id="lightbox" hidden>
   <div class="image"><img id="lb-img" alt=""></div>
   <aside>
@@ -388,6 +507,10 @@
     <label>Title <input id="lb-title"></label>
     <label>Description <textarea id="lb-description" rows="3"></textarea></label>
     <label>Notes <textarea id="lb-notes" rows="5"></textarea></label>
+    <div class="lb-color">
+      <span>Color</span>
+      <div id="lb-colors"></div>
+    </div>
     <button id="lb-goto">Go to frame</button>
     <div class="row">
       <button id="lb-prev">&#9664; Prev</button>
@@ -410,9 +533,11 @@ const STANDARD_FPS = [23.976, 24, 25, 29.97, 30, 50, 59.94, 60];
 const JPEG_QUALITY = 0.92;
 const TEXT_FIELDS = ['cue', 'title', 'description', 'notes'];
 const SHUTTLE_RATES = [1, 2, 4, 8];
+const DEFAULT_PALETTE = ['#e05252', '#e08a3c', '#e0c43c', '#5fb55f', '#3cb8c4', '#4f7fe0', '#9a5fe0', '#e05fa8'];
 
 const state = {
-  captures: [],      // { id, cue, title, description, notes, time, blob, url }
+  captures: [],      // { id, cue, title, description, notes, color, time, blob, url }
+  palette: DEFAULT_PALETTE.map((color) => ({ color, name: '' })),
   nextId: 1,
   storage: null,     // IndexedDB connection, null when unavailable
   videoName: '',
@@ -769,8 +894,8 @@ function removeStored(id) {
 }
 
 function saveMeta() {
-  const { videoName, videoBase, fps, fpsSource, inPoint } = state;
-  write('meta', (tx) => tx.objectStore('meta').put({ videoName, videoBase, fps, fpsSource, inPoint }, 'session'));
+  const { videoName, videoBase, fps, fpsSource, inPoint, palette } = state;
+  write('meta', (tx) => tx.objectStore('meta').put({ videoName, videoBase, fps, fpsSource, inPoint, palette }, 'session'));
 }
 
 function replaceStored() {
@@ -805,14 +930,16 @@ async function restore() {
       }
       state.inPoint = Number(meta.inPoint) || 0;
     }
+    if (meta) state.palette = normalizePalette(meta.palette);
     for (const record of records) {
       state.nextId = Math.max(state.nextId, record.id + 1);
-      state.captures.push({ ...record, url: URL.createObjectURL(record.blob) });
+      state.captures.push({ ...record, color: normalizeColor(record.color), url: URL.createObjectURL(record.blob) });
     }
     state.captures.sort((a, b) => a.time - b.time || a.id - b.id);
   } catch (err) {
     storageFailed(err);
   }
+  renderPalette();
   renderFpsSelect();
   renderInfo();
   renderInPoint();
@@ -823,7 +950,9 @@ async function restore() {
 async function loadVideo(file) {
   video.src = URL.createObjectURL(file);
   video.hidden = false;
+  if (prefs.videoHidden) setVideoHidden(false);
   $('#empty').hidden = true;
+  $('#stage').classList.remove('no-video');
   // Re-opening the same video keeps its in point; a different video starts at 0.
   if (file.name !== state.videoName) state.inPoint = 0;
   renderInPoint();
@@ -841,11 +970,13 @@ async function saveSession() {
     video: state.videoBase,
     fps: state.fps,
     inPoint: state.inPoint,
+    palette: state.palette,
     captures: await Promise.all(state.captures.map(async (c) => ({
       cue: c.cue,
       title: c.title,
       description: c.description,
       notes: c.notes,
+      color: c.color,
       time: c.time,
       image: await blobToDataUrl(c.blob),
     }))),
@@ -876,13 +1007,16 @@ async function openSession(file) {
   }
   if (session.fps) setFps(session.fps, 'session');
   state.inPoint = Number(session.inPoint) || 0;
+  // Sessions saved before colors existed get the default palette.
+  state.palette = normalizePalette(session.palette);
+  renderPalette();
   renderInPoint();
   renderTimecode();
   for (const c of session.captures) {
     const blob = dataUrlToBlob(c.image);
     addCapture({
       cue: c.cue || '', title: c.title || '', description: c.description || '',
-      notes: c.notes || '', time: Number(c.time) || 0, blob,
+      notes: c.notes || '', color: normalizeColor(c.color), time: Number(c.time) || 0, blob,
     });
   }
   replaceStored();
@@ -961,6 +1095,7 @@ function hideToast() {
 function deleteCapture(c) {
   const index = state.captures.indexOf(c);
   if (index < 0) return;
+  if (colorMenuFor === c) closeColorMenu();
   state.captures.splice(index, 1);
   URL.revokeObjectURL(c.url);
   removeStored(c.id);
@@ -992,7 +1127,7 @@ async function capture() {
   const time = video.currentTime;
   canvas.getContext('2d').drawImage(video, 0, 0);
   const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', JPEG_QUALITY));
-  const c = addCapture({ cue: '', title: '', description: '', notes: '', time, blob });
+  const c = addCapture({ cue: '', title: '', description: '', notes: '', color: '', time, blob });
   scheduleSave(c, true);
   render();
   document.querySelector(`#strip [data-id="${c.id}"]`)?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
@@ -1043,7 +1178,7 @@ function shuttleBack() {
 function goToCapture(c) {
   if (!video.duration || !c) return;
   if (state.lightbox >= 0) closeLightbox();
-  showView('capture');
+  if (prefs.videoHidden) setVideoHidden(false);
   stop();
   video.currentTime = c.time;
 }
@@ -1055,13 +1190,12 @@ function autosize(textarea) {
   textarea.style.height = `${textarea.scrollHeight + 2}px`;
 }
 
-// Grows the contact sheet text fields to their content; they measure 0 while the view is hidden.
-function autosizeGrid() {
-  if ($('#view-contacts').hidden) return;
-  for (const textarea of document.querySelectorAll('#grid textarea')) autosize(textarea);
+// Grows the capture text fields to their content. Runs again whenever the captures area changes width.
+function autosizeStrip() {
+  for (const textarea of document.querySelectorAll('#strip textarea')) autosize(textarea);
 }
 
-function thumb(c, wrapping = false) {
+function thumb(c) {
   const el = document.createElement('div');
   el.className = 'thumb';
   el.dataset.id = c.id;
@@ -1078,8 +1212,8 @@ function thumb(c, wrapping = false) {
 
   const fields = document.createElement('div');
   fields.className = 'fields';
-  for (const [field, placeholder] of [['cue', 'Cue'], ['title', 'Title'], ['description', 'Description']]) {
-    const multiline = wrapping && field !== 'cue';
+  for (const [field, placeholder] of [['cue', ''], ['title', 'Title'], ['description', 'Description']]) {
+    const multiline = field !== 'cue';
     const input = document.createElement(multiline ? 'textarea' : 'input');
     if (multiline) input.rows = 1;
     input.className = field;
@@ -1089,24 +1223,40 @@ function thumb(c, wrapping = false) {
     input.addEventListener('input', () => {
       c[field] = input.value;
       scheduleSave(c);
-      for (const twin of document.querySelectorAll(`.thumb[data-id="${c.id}"] [data-field="${field}"]`)) {
-        if (twin !== input) twin.value = input.value;
-      }
       if (multiline) autosize(input);
     });
     // Enter leaves the field so the keyboard shortcuts work again.
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
     });
-    fields.append(input);
+    if (field === 'cue') {
+      // The Q is drawn in front of the field; the stored value stays as typed.
+      input.title = 'Cue';
+      const box = document.createElement('div');
+      box.className = 'cue-box';
+      box.append(input);
+      fields.append(box);
+    } else {
+      fields.append(input);
+    }
   }
+
   const time = document.createElement('button');
   time.className = 'time';
   time.textContent = formatTime(c.time);
   time.disabled = !video.duration;
   time.title = 'Go to this frame';
   time.addEventListener('click', () => goToCapture(c));
-  fields.append(time);
+  const badges = document.createElement('div');
+  badges.className = 'badges';
+  badges.append(time);
+  if (c.notes.trim()) {
+    const notes = document.createElement('span');
+    notes.className = 'notes-flag';
+    notes.textContent = 'Notes';
+    notes.title = c.notes.trim().slice(0, 300);
+    badges.append(notes);
+  }
 
   const remove = document.createElement('button');
   remove.className = 'remove';
@@ -1114,33 +1264,246 @@ function thumb(c, wrapping = false) {
   remove.title = 'Delete (Ctrl+Z to undo)';
   remove.addEventListener('click', () => deleteCapture(c));
 
-  el.append(open, remove, fields);
+  const color = document.createElement('button');
+  color.className = 'color';
+  color.title = 'Color';
+  color.addEventListener('click', () => {
+    if (colorMenuFor === c) closeColorMenu();
+    else openColorMenu(c, color);
+  });
+
+  const frame = document.createElement('div');
+  frame.className = 'frame';
+  frame.append(open, color, remove, badges);
+  el.append(frame, fields);
+  paintThumb(el, c);
   return el;
+}
+
+// ---------- colors ----------
+// A capture color is '' (none), 'p0'..'p7' (a palette slot, so editing the palette recolors it) or '#rrggbb' (custom).
+
+const HEX = /^#[0-9a-f]{6}$/i;
+
+function normalizeColor(value) {
+  return typeof value === 'string' && (/^p[0-7]$/.test(value) || HEX.test(value)) ? value.toLowerCase() : '';
+}
+
+function normalizePalette(list) {
+  return DEFAULT_PALETTE.map((color, i) => ({
+    color: HEX.test(list?.[i]?.color) ? list[i].color.toLowerCase() : color,
+    name: typeof list?.[i]?.name === 'string' ? list[i].name : '',
+  }));
+}
+
+function cssColor(value) {
+  if (/^p[0-7]$/.test(value)) return `var(--${value})`;
+  return HEX.test(value) ? value : '';
+}
+
+function paintThumb(el, c) {
+  const css = cssColor(c.color);
+  el.classList.toggle('colored', Boolean(css));
+  if (css) el.style.setProperty('--capture-color', css);
+  else el.style.removeProperty('--capture-color');
+  const slot = /^p[0-7]$/.test(c.color) ? state.palette[Number(c.color[1])] : null;
+  el.querySelector('.color').title = slot ? `Color: ${slot.name || `Color ${Number(c.color[1]) + 1}`}` : 'Color';
+}
+
+function setCaptureColor(c, value) {
+  c.color = value;
+  scheduleSave(c);
+  for (const el of document.querySelectorAll(`.thumb[data-id="${c.id}"]`)) paintThumb(el, c);
+}
+
+// Eight palette swatches, None and a custom picker. onPick(value, done): done is false while the custom picker is dragged.
+function colorChoices(current, onPick) {
+  const box = document.createElement('div');
+  box.className = 'color-choices';
+  state.palette.forEach((slot, i) => {
+    const swatch = document.createElement('button');
+    swatch.className = 'swatch';
+    swatch.style.setProperty('--swatch', `var(--p${i})`);
+    swatch.title = slot.name || `Color ${i + 1}`;
+    swatch.classList.toggle('selected', current === `p${i}`);
+    swatch.addEventListener('click', () => onPick(`p${i}`, true));
+    box.append(swatch);
+  });
+  const none = document.createElement('button');
+  none.className = 'none';
+  none.textContent = 'None';
+  none.classList.toggle('selected', !current);
+  none.addEventListener('click', () => onPick('', true));
+  const custom = document.createElement('label');
+  custom.className = 'custom';
+  custom.classList.toggle('selected', HEX.test(current));
+  custom.title = 'Custom color';
+  const picker = document.createElement('input');
+  picker.type = 'color';
+  picker.value = HEX.test(current) ? current : '#ffffff';
+  picker.addEventListener('input', () => onPick(picker.value, false));
+  picker.addEventListener('change', () => onPick(picker.value, true));
+  custom.append(picker, 'Custom');
+  box.append(none, custom);
+  return box;
+}
+
+let colorMenuFor = null;
+
+function openColorMenu(c, anchor) {
+  const menu = $('#color-menu');
+  colorMenuFor = c;
+  menu.replaceChildren(colorChoices(c.color, (value, done) => {
+    setCaptureColor(c, value);
+    if (done) closeColorMenu();
+  }));
+  menu.hidden = false;
+  const r = anchor.getBoundingClientRect();
+  const left = Math.max(8, Math.min(r.left, innerWidth - menu.offsetWidth - 8));
+  const below = r.bottom + 4 + menu.offsetHeight <= innerHeight - 8;
+  menu.style.left = `${left}px`;
+  menu.style.top = `${below ? r.bottom + 4 : Math.max(8, r.top - menu.offsetHeight - 4)}px`;
+}
+
+function closeColorMenu() {
+  const menu = $('#color-menu');
+  if (menu.hidden) return;
+  if (menu.contains(document.activeElement)) document.activeElement.blur();
+  menu.hidden = true;
+  colorMenuFor = null;
+}
+
+function renderLightboxColors(c) {
+  $('#lb-colors').replaceChildren(colorChoices(c.color, (value, done) => {
+    setCaptureColor(c, value);
+    if (done) renderLightboxColors(c);
+  }));
+}
+
+function renderPaletteVars() {
+  state.palette.forEach((slot, i) => document.documentElement.style.setProperty(`--p${i}`, slot.color));
+}
+
+function renderPalette() {
+  renderPaletteVars();
+  $('#palette-editor').replaceChildren(...state.palette.map((slot, i) => {
+    const row = document.createElement('div');
+    row.className = 'palette-row';
+    const index = document.createElement('span');
+    index.className = 'index';
+    index.textContent = i + 1;
+    const picker = document.createElement('input');
+    picker.type = 'color';
+    picker.value = slot.color;
+    picker.addEventListener('input', () => { slot.color = picker.value; renderPaletteVars(); });
+    picker.addEventListener('change', saveMeta);
+    const name = document.createElement('input');
+    name.type = 'text';
+    name.placeholder = `Color ${i + 1}`;
+    name.value = slot.name;
+    name.addEventListener('input', () => { slot.name = name.value; saveMeta(); });
+    name.addEventListener('change', render);
+    name.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); name.blur(); }
+    });
+    row.append(index, picker, name);
+    return row;
+  }));
+}
+
+// ---------- layout preferences ----------
+// Layout and sizes are per browser, not per session: a few bytes in localStorage, never in the JSON file.
+
+const PREFS_KEY = 'lumina-prefs';
+const MIN_STRIP = 120;
+const MIN_MAIN = { bottom: 200, side: 320 };
+const PREF_RANGES = {
+  stripHeight: [MIN_STRIP, 4000, 260],
+  stripWidth: [MIN_STRIP, 4000, 360],
+  thumbWithVideo: [120, 400, 220],
+  thumbWithoutVideo: [160, 480, 240],
+};
+
+function clamp(v, min, max) {
+  return Math.max(min, Math.min(v, max));
+}
+
+function loadPrefs() {
+  let saved = {};
+  try {
+    saved = JSON.parse(localStorage.getItem(PREFS_KEY)) || {};
+  } catch {
+    // Storage blocked or unreadable: defaults.
+  }
+  const prefs = { layout: saved.layout === 'side' ? 'side' : 'bottom', videoHidden: saved.videoHidden === true };
+  for (const [key, [min, max, fallback]] of Object.entries(PREF_RANGES)) {
+    prefs[key] = Number.isFinite(saved[key]) ? clamp(saved[key], min, max) : fallback;
+  }
+  return prefs;
+}
+
+const prefs = loadPrefs();
+
+function savePrefs() {
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+  } catch {
+    // Not kept for the next visit; the layout still applies now.
+  }
+}
+
+function applyPrefs() {
+  const root = document.documentElement.style;
+  root.setProperty('--strip-height', `${prefs.stripHeight}px`);
+  root.setProperty('--strip-width', `${prefs.stripWidth}px`);
+  root.setProperty('--thumb-with-video', `${prefs.thumbWithVideo}px`);
+  root.setProperty('--thumb-without-video', `${prefs.thumbWithoutVideo}px`);
+  const view = $('#view-capture');
+  view.classList.toggle('layout-side', prefs.layout === 'side');
+  view.classList.toggle('video-hidden', prefs.videoHidden);
+  $('#capture-main').hidden = prefs.videoHidden;
+  $('#splitter').hidden = prefs.videoHidden;
+  const toggle = $('#toggle-video');
+  toggle.textContent = prefs.videoHidden ? 'Show video' : 'Hide video';
+  toggle.title = `${prefs.videoHidden ? 'Show' : 'Hide'} the video (V)`;
+  for (const button of document.querySelectorAll('[data-layout]')) {
+    button.classList.toggle('active', button.dataset.layout === prefs.layout);
+  }
+  $('#thumb-with-video').value = prefs.thumbWithVideo;
+  $('#thumb-with-video-value').textContent = `${prefs.thumbWithVideo} px`;
+  $('#thumb-without-video').value = prefs.thumbWithoutVideo;
+  $('#thumb-without-video-value').textContent = `${prefs.thumbWithoutVideo} px`;
+}
+
+// Hiding the video pauses it; the captures take the whole view.
+function setVideoHidden(hidden) {
+  if (hidden) video.pause();
+  prefs.videoHidden = hidden;
+  applyPrefs();
+  savePrefs();
 }
 
 function render() {
   const strip = $('#strip');
-  const grid = $('#grid');
   strip.replaceChildren(...state.captures.map((c) => thumb(c)));
-  grid.replaceChildren(...state.captures.map((c) => thumb(c, true)));
-  autosizeGrid();
   if (!state.captures.length) {
     const empty = document.createElement('div');
     empty.className = 'empty';
     empty.textContent = 'No captures yet.';
-    grid.append(empty);
+    strip.append(empty);
   }
+  autosizeStrip();
   const has = state.captures.length > 0;
   $('#save-session').disabled = !has;
   $('#download-zip').disabled = !has;
   $('#clear').disabled = !has;
-  $('#tab-contacts').textContent = `Contacts (${state.captures.length})`;
+  $('#count').textContent = `${state.captures.length} ${state.captures.length === 1 ? 'capture' : 'captures'}`;
 }
 
 function renderEmpty() {
   $('#empty').textContent = state.captures.length && state.videoName && !video.src
     ? `Re-open ${state.videoName} to continue`
-    : 'Open a video or drop an mp4 here';
+    : 'Click or drop an mp4 here';
 }
 
 function renderFpsSelect() {
@@ -1175,17 +1538,6 @@ function setInPoint(t) {
   render();
 }
 
-function showView(name) {
-  $('#view-capture').hidden = name !== 'capture';
-  $('#view-contacts').hidden = name !== 'contacts';
-  $('#tab-capture').classList.toggle('active', name === 'capture');
-  $('#tab-contacts').classList.toggle('active', name === 'contacts');
-  if (name === 'contacts') {
-    video.pause();
-    autosizeGrid();
-  }
-}
-
 // ---------- lightbox ----------
 
 function openLightbox(index) {
@@ -1198,6 +1550,7 @@ function openLightbox(index) {
   $('#lb-prev').disabled = index === 0;
   $('#lb-next').disabled = index === state.captures.length - 1;
   $('#lb-goto').disabled = !video.duration;
+  renderLightboxColors(c);
   $('#lightbox').hidden = false;
   video.pause();
 }
@@ -1229,6 +1582,9 @@ for (const field of TEXT_FIELDS) {
 // ---------- events ----------
 
 $('#open-video').addEventListener('click', () => $('#video-input').click());
+$('#stage').addEventListener('click', () => {
+  if (!video.src) $('#video-input').click();
+});
 $('#open-session').addEventListener('click', () => $('#session-input').click());
 $('#video-input').addEventListener('change', (e) => {
   if (e.target.files[0]) loadVideo(e.target.files[0]);
@@ -1252,8 +1608,7 @@ $('#in-point').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') e.target.blur();
   else if (e.key === 'Escape') { renderInPoint(); e.target.blur(); }
 });
-$('#tab-capture').addEventListener('click', () => showView('capture'));
-$('#tab-contacts').addEventListener('click', () => showView('contacts'));
+$('#toggle-video').addEventListener('click', () => setVideoHidden(!prefs.videoHidden));
 $('#step-back').addEventListener('click', () => stepFrames(-1));
 $('#step-forward').addEventListener('click', () => stepFrames(1));
 $('#capture').addEventListener('click', capture);
@@ -1317,8 +1672,83 @@ for (const id of ['#open-session', '#save-session', '#download-zip', '#clear']) 
   $(id).addEventListener('click', closeOptions);
 }
 
+for (const button of document.querySelectorAll('[data-layout]')) {
+  button.addEventListener('click', () => {
+    prefs.layout = button.dataset.layout;
+    applyPrefs();
+    savePrefs();
+  });
+}
+$('#thumb-with-video').addEventListener('input', (e) => {
+  prefs.thumbWithVideo = Number(e.target.value);
+  applyPrefs();
+  savePrefs();
+});
+$('#thumb-without-video').addEventListener('input', (e) => {
+  prefs.thumbWithoutVideo = Number(e.target.value);
+  applyPrefs();
+  savePrefs();
+});
+
+$('#palette-reset').addEventListener('click', () => {
+  if (!confirm('Reset the palette colors and names?')) return;
+  state.palette = normalizePalette();
+  renderPalette();
+  saveMeta();
+  render();
+});
+
+// Splitter: drag sets the height of the captures below the video, or their width when they sit on the right.
+$('#splitter').addEventListener('pointerdown', (e) => {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  const splitter = e.currentTarget;
+  const view = $('#view-capture');
+  const side = getComputedStyle(view).flexDirection === 'row';
+  splitter.setPointerCapture(e.pointerId);
+  splitter.classList.add('dragging');
+  const move = (ev) => {
+    const r = view.getBoundingClientRect();
+    if (side) {
+      prefs.stripWidth = Math.round(clamp(r.right - ev.clientX - splitter.offsetWidth / 2, MIN_STRIP, r.width - MIN_MAIN.side));
+    } else {
+      prefs.stripHeight = Math.round(clamp(r.bottom - ev.clientY - splitter.offsetHeight / 2, MIN_STRIP, r.height - MIN_MAIN.bottom));
+    }
+    applyPrefs();
+  };
+  const end = () => {
+    splitter.removeEventListener('pointermove', move);
+    splitter.removeEventListener('pointerup', end);
+    splitter.removeEventListener('pointercancel', end);
+    splitter.classList.remove('dragging');
+    savePrefs();
+  };
+  splitter.addEventListener('pointermove', move);
+  splitter.addEventListener('pointerup', end);
+  splitter.addEventListener('pointercancel', end);
+});
+
+// The color menu closes on a click elsewhere or when its thumbnail scrolls away.
+document.addEventListener('pointerdown', (e) => {
+  if (!e.target.closest('#color-menu, .thumb .color')) closeColorMenu();
+});
+$('#strip').addEventListener('scroll', closeColorMenu);
+
+// Card widths change with the window, the splitter, the thumbnail size and the video toggle: text fields re-measure once per frame.
+let autosizeFrame = 0;
+new ResizeObserver(() => {
+  cancelAnimationFrame(autosizeFrame);
+  autosizeFrame = requestAnimationFrame(autosizeStrip);
+}).observe($('#strip'));
+
 window.addEventListener('keydown', (e) => {
   const typing = e.target.matches('input, textarea, select');
+
+  if (!$('#color-menu').hidden && e.key === 'Escape') {
+    e.preventDefault();
+    closeColorMenu();
+    return;
+  }
 
   // The options panel keeps the app shortcuts out while open; Tab, Enter and Space still work on its buttons.
   if (!$('#options').hidden) {
@@ -1347,8 +1777,14 @@ window.addEventListener('keydown', (e) => {
     return;
   }
 
-  if (typing || $('#view-capture').hidden || !video.duration || e.altKey) return;
+  if (typing || e.altKey) return;
   const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  if (key === 'v' && !e.ctrlKey && !e.metaKey) {
+    e.preventDefault();
+    setVideoHidden(!prefs.videoHidden);
+    return;
+  }
+  if (prefs.videoHidden || !video.duration) return;
   if (key === 'ArrowLeft' || key === 'ArrowRight') {
     e.preventDefault();
     const dir = key === 'ArrowLeft' ? -1 : 1;
@@ -1397,7 +1833,6 @@ window.addEventListener('drop', (e) => {
   else if (file.type.startsWith('video/') || /\.(mp4|m4v|mov)$/i.test(file.name)) loadVideo(file);
 });
 
-window.addEventListener('resize', autosizeGrid);
 
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) flushSaves();
@@ -1412,6 +1847,8 @@ window.addEventListener('beforeunload', (e) => {
   }
 });
 
+applyPrefs();
+renderPalette();
 renderFpsSelect();
 renderInfo();
 render();
