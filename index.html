@@ -50,6 +50,7 @@
   header .brand { font-weight: 600; letter-spacing: .05em; margin-right: 8px; }
   header .spacer { flex: 1; }
   #info { color: var(--muted); }
+  #storage-warning { color: var(--accent); }
 
   main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   .view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
@@ -83,31 +84,51 @@
     overflow-x: auto;
     padding: 8px 12px;
     border-top: 1px solid var(--line);
-    min-height: 104px;
   }
-  .strip .thumb { flex: 0 0 auto; width: 140px; }
+  .strip .thumb { flex: 0 0 auto; width: 220px; }
 
   .thumb {
-    padding: 0;
-    text-align: left;
     background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 4px;
     overflow: hidden;
+  }
+  .thumb .open {
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: #000;
   }
   .thumb img {
     display: block;
     width: 100%;
     aspect-ratio: 16 / 9;
     object-fit: contain;
-    background: #000;
   }
-  .thumb .label {
-    padding: 4px 6px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  .thumb .fields {
+    display: grid;
+    grid-template-columns: 4.5em 1fr;
+    gap: 4px;
+    padding: 6px;
   }
-  .thumb .label .cue { color: var(--accent); font-weight: 600; }
-  .thumb .time { padding: 0 6px 4px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .thumb .fields input { width: 100%; min-width: 0; padding: 3px 6px; font-size: 13px; }
+  .thumb .fields .cue { color: var(--accent); font-weight: 600; }
+  .thumb .fields .description { grid-column: 1 / -1; }
+  .thumb .time {
+    grid-column: 1 / -1;
+    justify-self: start;
+    padding: 0 2px;
+    border: 0;
+    background: none;
+    color: var(--muted);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+  .thumb .time:hover:not(:disabled) { color: var(--accent); text-decoration: underline; }
+  .thumb .time:disabled { opacity: 1; }
+  #rate { color: var(--accent); font-weight: 600; min-width: 3ch; }
 
   .grid {
     flex: 1;
@@ -166,6 +187,8 @@
   <button id="open-session">Open session</button>
   <button id="save-session" disabled>Save session</button>
   <button id="download-zip" disabled>Download all</button>
+  <button id="clear" disabled>Clear</button>
+  <span id="storage-warning" hidden>Not saved in this browser: save the session before closing</span>
   <span class="spacer"></span>
   <span id="info"></span>
   <button id="tab-capture" class="active">Capture</button>
@@ -184,9 +207,10 @@
       <button id="step-back" title="Previous frame (Left)" disabled>&#9664; Frame</button>
       <button id="step-forward" title="Next frame (Right)" disabled>Frame &#9654;</button>
       <span id="timecode">00:00:00.00</span>
+      <span id="rate"></span>
       <label>fps <select id="fps"></select></label>
       <button id="capture" class="primary" title="Capture (C)" disabled>Capture</button>
-      <span class="hint">Left/Right frame &middot; Shift+Left/Right 1 s &middot; Space play &middot; C capture</span>
+      <span class="hint">L play, faster &middot; J slower, pause, frame back &middot; K pause &middot; K+J/L or Left/Right frame &middot; Shift+Left/Right 1 s &middot; Space play &middot; C capture</span>
     </div>
     <div id="strip" class="strip"></div>
   </section>
@@ -204,6 +228,7 @@
     <label>Title <input id="lb-title"></label>
     <label>Description <textarea id="lb-description" rows="3"></textarea></label>
     <label>Notes <textarea id="lb-notes" rows="5"></textarea></label>
+    <button id="lb-goto">Go to frame</button>
     <div class="row">
       <button id="lb-prev">&#9664; Prev</button>
       <button id="lb-next">Next &#9654;</button>
@@ -224,15 +249,18 @@ const $ = (sel) => document.querySelector(sel);
 const STANDARD_FPS = [23.976, 24, 25, 29.97, 30, 50, 59.94, 60];
 const JPEG_QUALITY = 0.92;
 const TEXT_FIELDS = ['cue', 'title', 'description', 'notes'];
+const SHUTTLE_RATES = [1, 2, 4, 8];
 
 const state = {
   captures: [],      // { id, cue, title, description, notes, time, blob, url }
   nextId: 1,
-  dirty: false,
+  storage: null,     // IndexedDB connection, null when unavailable
+  videoName: '',
   videoBase: '',
   fps: 25,
   fpsSource: 'default',
   lightbox: -1,
+  kHeld: false,
 };
 
 const video = $('#video');
@@ -371,6 +399,7 @@ function setFps(value, source) {
   state.fpsSource = source;
   renderFpsSelect();
   renderInfo();
+  saveMeta();
 }
 
 // ---------- zip (store, no compression) ----------
@@ -477,10 +506,135 @@ function dataUrlToBlob(dataUrl) {
   return new Blob([bytes], { type: mime });
 }
 
+// ---------- storage (IndexedDB) ----------
+// Captures are autosaved so a reload keeps them. localStorage is not an option:
+// its ~5 MB quota fills with a few dozen JPGs and then every write fails.
+
+const DB_NAME = 'lumina';
+const SAVE_DELAY = 400;
+const pendingSaves = new Set();
+let saveTimer = 0;
+
+function request(req) {
+  return new Promise((resolve, reject) => {
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function openStorage() {
+  try {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      req.result.createObjectStore('captures', { keyPath: 'id' });
+      req.result.createObjectStore('meta');
+    };
+    return await request(req);
+  } catch (err) {
+    console.warn('lumina: browser storage unavailable', err);
+    return null;
+  }
+}
+
+function storageFailed(err) {
+  console.error('lumina: browser storage failed', err);
+  state.storage = null;
+  $('#storage-warning').hidden = false;
+}
+
+function write(stores, fn) {
+  if (!state.storage) return;
+  try {
+    const tx = state.storage.transaction(stores, 'readwrite');
+    tx.onabort = () => storageFailed(tx.error);
+    fn(tx);
+  } catch (err) {
+    storageFailed(err);
+  }
+}
+
+function storedRecord(c) {
+  const { url, ...record } = c;
+  return record;
+}
+
+function scheduleSave(c, now = false) {
+  pendingSaves.add(c.id);
+  clearTimeout(saveTimer);
+  if (now) flushSaves();
+  else saveTimer = setTimeout(flushSaves, SAVE_DELAY);
+}
+
+function flushSaves() {
+  clearTimeout(saveTimer);
+  if (!pendingSaves.size) return;
+  const records = state.captures.filter((c) => pendingSaves.has(c.id)).map(storedRecord);
+  pendingSaves.clear();
+  write('captures', (tx) => {
+    for (const record of records) tx.objectStore('captures').put(record);
+  });
+}
+
+function removeStored(id) {
+  pendingSaves.delete(id);
+  write('captures', (tx) => tx.objectStore('captures').delete(id));
+}
+
+function saveMeta() {
+  const { videoName, videoBase, fps, fpsSource } = state;
+  write('meta', (tx) => tx.objectStore('meta').put({ videoName, videoBase, fps, fpsSource }, 'session'));
+}
+
+function replaceStored() {
+  pendingSaves.clear();
+  const records = state.captures.map(storedRecord);
+  write(['captures', 'meta'], (tx) => {
+    const captures = tx.objectStore('captures');
+    captures.clear();
+    for (const record of records) captures.put(record);
+  });
+  saveMeta();
+}
+
+async function restore() {
+  state.storage = await openStorage();
+  if (!state.storage) {
+    $('#storage-warning').hidden = false;
+    return;
+  }
+  try {
+    const tx = state.storage.transaction(['captures', 'meta']);
+    const [records, meta] = await Promise.all([
+      request(tx.objectStore('captures').getAll()),
+      request(tx.objectStore('meta').get('session')),
+    ]);
+    if (meta && !video.src) {
+      state.videoName = meta.videoName || '';
+      state.videoBase = meta.videoBase || '';
+      if (meta.fps) {
+        state.fps = meta.fps;
+        state.fpsSource = meta.fpsSource || 'restored';
+      }
+    }
+    for (const record of records) {
+      state.nextId = Math.max(state.nextId, record.id + 1);
+      state.captures.push({ ...record, url: URL.createObjectURL(record.blob) });
+    }
+    state.captures.sort((a, b) => a.time - b.time || a.id - b.id);
+  } catch (err) {
+    storageFailed(err);
+  }
+  renderFpsSelect();
+  renderInfo();
+  renderEmpty();
+  render();
+}
+
 async function loadVideo(file) {
   video.src = URL.createObjectURL(file);
   video.hidden = false;
   $('#empty').hidden = true;
+  state.videoName = file.name;
   state.videoBase = file.name.replace(/\.[^.]+$/, '');
   const detected = await detectFps(file);
   if (detected) setFps(detected.fps, detected.variable ? 'file, variable' : 'file');
@@ -504,7 +658,6 @@ async function saveSession() {
   };
   download(new Blob([JSON.stringify(session)], { type: 'application/json' }),
     `${state.videoBase || 'lumina'}_lumina.json`);
-  state.dirty = false;
 }
 
 async function openSession(file) {
@@ -519,12 +672,14 @@ async function openSession(file) {
     alert('This file is not a lumina session.');
     return;
   }
-  if (state.dirty && state.captures.length &&
-      !confirm('Replace the current captures? Unsaved changes will be lost.')) {
+  if (state.captures.length && !confirm('Replace the current captures with this session?')) {
     return;
   }
   clearCaptures();
-  if (!video.src) state.videoBase = session.video || '';
+  if (!video.src) {
+    state.videoBase = session.video || '';
+    state.videoName = '';
+  }
   if (session.fps) setFps(session.fps, 'session');
   for (const c of session.captures) {
     const blob = dataUrlToBlob(c.image);
@@ -533,7 +688,23 @@ async function openSession(file) {
       notes: c.notes || '', time: Number(c.time) || 0, blob,
     });
   }
-  state.dirty = false;
+  replaceStored();
+  renderEmpty();
+  render();
+}
+
+function clearAll() {
+  if (!state.captures.length) return;
+  if (!confirm('Remove all captures? Save the session first if you want to keep them.')) return;
+  if (state.lightbox >= 0) closeLightbox();
+  clearCaptures();
+  if (!video.src) {
+    state.videoName = '';
+    state.videoBase = '';
+  }
+  replaceStored();
+  renderInfo();
+  renderEmpty();
   render();
 }
 
@@ -573,7 +744,7 @@ async function capture() {
   canvas.getContext('2d').drawImage(video, 0, 0);
   const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', JPEG_QUALITY));
   const c = addCapture({ cue: '', title: '', description: '', notes: '', time: video.currentTime, blob });
-  state.dirty = true;
+  scheduleSave(c, true);
   render();
   document.querySelector(`#strip [data-id="${c.id}"]`)?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
 }
@@ -591,31 +762,88 @@ function stepSeconds(s) {
   video.currentTime = Math.min(Math.max(video.currentTime + s, 0), video.duration);
 }
 
+// L: play at 1x, each further press goes to the next rate.
+function shuttleForward() {
+  if (!video.duration) return;
+  if (video.paused) {
+    video.playbackRate = 1;
+    video.play();
+  } else {
+    const next = SHUTTLE_RATES.find((r) => r > video.playbackRate);
+    video.playbackRate = next ?? SHUTTLE_RATES[SHUTTLE_RATES.length - 1];
+  }
+}
+
+function stop() {
+  video.pause();
+  video.playbackRate = 1;
+}
+
+// J: one rate down while playing faster than 1x, pause at 1x, one frame back when paused.
+function shuttleBack() {
+  if (!video.duration) return;
+  if (video.paused) {
+    stepFrames(-1);
+  } else if (video.playbackRate > 1) {
+    video.playbackRate = [...SHUTTLE_RATES].reverse().find((r) => r < video.playbackRate) ?? 1;
+  } else {
+    stop();
+  }
+}
+
+function goToCapture(c) {
+  if (!video.duration || !c) return;
+  if (state.lightbox >= 0) closeLightbox();
+  showView('capture');
+  stop();
+  video.currentTime = c.time;
+}
+
 // ---------- rendering ----------
 
 function thumb(c) {
-  const el = document.createElement('button');
+  const el = document.createElement('div');
   el.className = 'thumb';
   el.dataset.id = c.id;
-  const cue = cueLabel(c.cue);
-  const label = document.createElement('div');
-  label.className = 'label';
-  if (cue) {
-    const span = document.createElement('span');
-    span.className = 'cue';
-    span.textContent = cue.replace(/^Q0+(?=\d)/, 'Q');
-    label.append(span, c.title ? ' ' : '');
-  }
-  label.append(c.title || (cue ? '' : ' '));
+
+  const open = document.createElement('button');
+  open.className = 'open';
+  open.title = 'Open';
   const img = document.createElement('img');
   img.src = c.url;
   img.alt = '';
   img.loading = 'lazy';
-  const time = document.createElement('div');
+  open.append(img);
+  open.addEventListener('click', () => openLightbox(state.captures.indexOf(c)));
+
+  const fields = document.createElement('div');
+  fields.className = 'fields';
+  for (const [field, placeholder] of [['cue', 'Cue'], ['title', 'Title'], ['description', 'Description']]) {
+    const input = document.createElement('input');
+    input.className = field;
+    input.dataset.field = field;
+    input.placeholder = placeholder;
+    input.value = c[field];
+    input.addEventListener('input', () => {
+      c[field] = input.value;
+      scheduleSave(c);
+      for (const twin of document.querySelectorAll(`.thumb[data-id="${c.id}"] [data-field="${field}"]`)) {
+        if (twin !== input) twin.value = input.value;
+      }
+    });
+    // Enter leaves the field so the keyboard shortcuts work again.
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); });
+    fields.append(input);
+  }
+  const time = document.createElement('button');
   time.className = 'time';
   time.textContent = formatTime(c.time);
-  el.append(img, label, time);
-  el.addEventListener('click', () => openLightbox(state.captures.indexOf(c)));
+  time.disabled = !video.duration;
+  time.title = 'Go to this frame';
+  time.addEventListener('click', () => goToCapture(c));
+  fields.append(time);
+
+  el.append(open, fields);
   return el;
 }
 
@@ -633,7 +861,14 @@ function render() {
   const has = state.captures.length > 0;
   $('#save-session').disabled = !has;
   $('#download-zip').disabled = !has;
+  $('#clear').disabled = !has;
   $('#tab-contacts').textContent = `Contacts (${state.captures.length})`;
+}
+
+function renderEmpty() {
+  $('#empty').textContent = state.captures.length && state.videoName && !video.src
+    ? `Re-open ${state.videoName} to continue`
+    : 'Open a video or drop an mp4 here';
 }
 
 function renderFpsSelect() {
@@ -673,6 +908,7 @@ function openLightbox(index) {
   for (const field of TEXT_FIELDS) $(`#lb-${field}`).value = c[field];
   $('#lb-prev').disabled = index === 0;
   $('#lb-next').disabled = index === state.captures.length - 1;
+  $('#lb-goto').disabled = !video.duration;
   $('#lightbox').hidden = false;
   video.pause();
 }
@@ -689,7 +925,7 @@ function deleteCurrent() {
   if (index < 0) return;
   const [removed] = state.captures.splice(index, 1);
   URL.revokeObjectURL(removed.url);
-  state.dirty = true;
+  removeStored(removed.id);
   if (!state.captures.length) closeLightbox();
   else openLightbox(Math.min(index, state.captures.length - 1));
 }
@@ -699,7 +935,7 @@ for (const field of TEXT_FIELDS) {
     const c = state.captures[state.lightbox];
     if (!c) return;
     c[field] = e.target.value;
-    state.dirty = true;
+    scheduleSave(c);
   });
 }
 
@@ -717,6 +953,7 @@ $('#session-input').addEventListener('change', (e) => {
 });
 $('#save-session').addEventListener('click', saveSession);
 $('#download-zip').addEventListener('click', downloadZip);
+$('#clear').addEventListener('click', clearAll);
 $('#tab-capture').addEventListener('click', () => showView('capture'));
 $('#tab-contacts').addEventListener('click', () => showView('contacts'));
 $('#step-back').addEventListener('click', () => stepFrames(-1));
@@ -726,19 +963,24 @@ $('#fps').addEventListener('change', (e) => setFps(Number(e.target.value), 'manu
 $('#lb-prev').addEventListener('click', () => openLightbox(state.lightbox - 1));
 $('#lb-next').addEventListener('click', () => openLightbox(state.lightbox + 1));
 $('#lb-delete').addEventListener('click', deleteCurrent);
+$('#lb-goto').addEventListener('click', () => goToCapture(state.captures[state.lightbox]));
 $('#lb-close').addEventListener('click', closeLightbox);
 
 video.addEventListener('loadedmetadata', () => {
   for (const id of ['#step-back', '#step-forward', '#capture']) $(id).disabled = false;
   renderInfo();
   renderTimecode();
+  render();
 });
 video.addEventListener('timeupdate', renderTimecode);
 video.addEventListener('seeked', renderTimecode);
+video.addEventListener('ratechange', () => {
+  $('#rate').textContent = video.playbackRate === 1 ? '' : `${video.playbackRate}x`;
+});
 
 // Buttons keep no focus, so Space and arrows always reach the shortcuts.
 document.addEventListener('click', (e) => {
-  if (e.target.closest('header button, .controls button')) e.target.closest('button').blur();
+  if (e.target.closest('header button, .controls button, .thumb button')) e.target.closest('button').blur();
 });
 
 window.addEventListener('keydown', (e) => {
@@ -753,20 +995,39 @@ window.addEventListener('keydown', (e) => {
     return;
   }
 
-  if (typing || $('#view-capture').hidden || !video.duration) return;
-  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+  if (typing || $('#view-capture').hidden || !video.duration || e.ctrlKey || e.metaKey || e.altKey) return;
+  const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  if (key === 'ArrowLeft' || key === 'ArrowRight') {
     e.preventDefault();
-    const dir = e.key === 'ArrowLeft' ? -1 : 1;
+    const dir = key === 'ArrowLeft' ? -1 : 1;
     if (e.shiftKey) stepSeconds(dir);
     else stepFrames(dir);
-  } else if (e.key === ' ') {
+  } else if (key === 'j') {
     e.preventDefault();
-    if (video.paused) video.play(); else video.pause();
-  } else if (e.key === 'c' || e.key === 'C') {
+    if (state.kHeld) stepFrames(-1);
+    else if (!e.repeat) shuttleBack();
+    else if (video.paused) stepFrames(-1);   // holding J while paused keeps stepping back
+  } else if (key === 'k') {
+    e.preventDefault();
+    state.kHeld = true;
+    if (!e.repeat) stop();
+  } else if (key === 'l') {
+    e.preventDefault();
+    if (state.kHeld) stepFrames(1);
+    else if (!e.repeat) shuttleForward();
+  } else if (key === ' ') {
+    e.preventDefault();
+    if (video.paused) { video.playbackRate = 1; video.play(); } else video.pause();
+  } else if (key === 'c') {
     e.preventDefault();
     capture();
   }
 }, true);
+
+window.addEventListener('keyup', (e) => {
+  if (e.key.toLowerCase() === 'k') state.kHeld = false;
+});
+window.addEventListener('blur', () => { state.kHeld = false; });
 
 window.addEventListener('dragover', (e) => e.preventDefault());
 window.addEventListener('drop', (e) => {
@@ -777,8 +1038,14 @@ window.addEventListener('drop', (e) => {
   else if (file.type.startsWith('video/') || /\.(mp4|m4v|mov)$/i.test(file.name)) loadVideo(file);
 });
 
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) flushSaves();
+});
+
 window.addEventListener('beforeunload', (e) => {
-  if (state.dirty && state.captures.length) {
+  flushSaves();
+  // Only warn when nothing is being kept in browser storage.
+  if (!state.storage && state.captures.length) {
     e.preventDefault();
     e.returnValue = '';
   }
@@ -787,6 +1054,7 @@ window.addEventListener('beforeunload', (e) => {
 renderFpsSelect();
 renderInfo();
 render();
+restore();
 </script>
 </body>
 </html>
