@@ -35,6 +35,7 @@ Web app to grab frames from a video of a theatre performance and keep a record o
 - Contact sheet view: thumbnail grid with editable cue, title and description; notes only in the lightbox. Title and description wrap and the card grows, so no text is cut; the capture strip keeps single-line fields
 - Capture time is read at the moment the frame is drawn, before JPG encoding, so captures taken while playing or seeking are labelled with their own frame
 - Shortcut legend: ? key or the ? button in the header; Esc, ? or a click outside closes it
+- Favicon: `favicon.svg`, amber spotlight on a dark rounded square, checked rasterized at 16 and 32 px
 - Clicking a capture's timestamp, or Go to frame in the lightbox, moves the video to that frame (disabled when no video is loaded)
 - Lightbox: click a thumbnail; arrows to navigate, edit all fields, Delete key removes, Esc goes back
 - Delete from every view (× on each thumbnail, Delete in the lightbox) without confirmation: an Undo toast shows for 8 s and Ctrl+Z restores deletions one by one during the session. Clear keeps its confirmation
