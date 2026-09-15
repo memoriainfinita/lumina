@@ -22,6 +22,10 @@ Web app to grab frames from a video of a theatre performance and keep a record o
 - J steps down: one rate slower while faster than 1x, pause at 1x, one frame back when paused. No reverse playback: Chrome and Firefox do not support it
 - K pauses and resets to 1x
 - Frame rate read from the mp4 header; manual selector as fallback and override (variable frame rate videos get an average)
+- In point: I or Set in marks the current frame, or type it as video time (HH:MM:SS.ff); × resets to 0. No out point
+- Show time counts from the in point and starts at 00:00:00.00; negative before it. Used in the timecode, thumbnails, lightbox and zip names
+- Captures store the real video time, so moving the in point relabels them and Go to frame stays exact
+- The in point is kept in browser storage and in the JSON session; opening a different video resets it to 0
 - Capture the current frame at the video's native resolution, as JPG
 - Each capture has its own fields: cue, title, description, notes, all optional, plus the video timestamp
 - Cue is a separate field because cues get renumbered. Decimals allowed: `12`, `12.5`

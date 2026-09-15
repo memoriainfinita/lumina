@@ -162,6 +162,9 @@
   .thumb .time:hover:not(:disabled) { color: var(--accent); text-decoration: underline; }
   .thumb .time:disabled { opacity: 1; }
   #rate { color: var(--accent); font-weight: 600; min-width: 3ch; }
+  .in-point { display: inline-flex; gap: 4px; align-items: center; }
+  #in-point { width: 14ch; font-variant-numeric: tabular-nums; }
+  #in-point.invalid { border-color: #c0392b; }
 
   .grid {
     flex: 1;
@@ -239,11 +242,16 @@
     <div class="controls">
       <button id="step-back" title="Previous frame (Left)" disabled>&#9664; Frame</button>
       <button id="step-forward" title="Next frame (Right)" disabled>Frame &#9654;</button>
-      <span id="timecode">00:00:00.00</span>
+      <span id="timecode" title="Show time, counted from the in point">00:00:00.00</span>
       <span id="rate"></span>
+      <span class="in-point">
+        <button id="set-in" title="Set the in point at the current frame (I)" disabled>Set in</button>
+        <input id="in-point" title="In point, as video time: HH:MM:SS.ff" value="00:00:00.00" size="11">
+        <button id="clear-in" title="Clear the in point">&times;</button>
+      </span>
       <label>fps <select id="fps"></select></label>
       <button id="capture" class="primary" title="Capture (C)" disabled>Capture</button>
-      <span class="hint">L play, faster &middot; J slower, pause, frame back &middot; K pause &middot; K+J/L or Left/Right frame &middot; Shift+Left/Right 1 s &middot; Space play &middot; C capture</span>
+      <span class="hint">L play, faster &middot; J slower, pause, frame back &middot; K pause &middot; K+J/L or Left/Right frame &middot; Shift+Left/Right 1 s &middot; I set in &middot; Space play &middot; C capture</span>
     </div>
     <div id="strip" class="strip"></div>
   </section>
@@ -299,6 +307,7 @@ const state = {
   fpsSource: 'default',
   lightbox: -1,
   kHeld: false,
+  inPoint: 0,        // video time where the performance starts; show time counts from here
 };
 
 const video = $('#video');
@@ -309,14 +318,38 @@ function pad(n, width = 2) {
   return String(n).padStart(width, '0');
 }
 
-function formatTime(t, forFile = false) {
+function frameOf(t) {
+  return Math.floor(t * state.fps + 1e-4);
+}
+
+// Frame count to HH:MM:SS.ff, negative before the in point.
+function formatFrames(n, forFile = false) {
+  const sign = n < 0 ? '-' : '';
+  const t = (Math.abs(n) + 0.5) / state.fps;
   const h = Math.floor(t / 3600);
   const m = Math.floor((t % 3600) / 60);
   const s = Math.floor(t % 60);
   const f = Math.floor((t - Math.floor(t)) * state.fps + 1e-4);
-  return forFile
+  return sign + (forFile
     ? `${pad(h)}-${pad(m)}-${pad(s)}-${pad(f)}`
-    : `${pad(h)}:${pad(m)}:${pad(s)}.${pad(f)}`;
+    : `${pad(h)}:${pad(m)}:${pad(s)}.${pad(f)}`);
+}
+
+// Show time: video time counted from the in point.
+function formatTime(t, forFile = false) {
+  return formatFrames(frameOf(t) - frameOf(state.inPoint), forFile);
+}
+
+// Accepts HH:MM:SS.ff or MM:SS.ff (video time). Returns seconds at the frame centre, or null.
+function parseTimecode(text) {
+  const match = text.trim().match(/^(?:(\d+):)?(\d{1,2}):(\d{1,2})(?:[.:](\d{1,2}))?$/);
+  if (!match) return null;
+  const [, h = '0', m, s, f = '0'] = match;
+  if (Number(m) > 59 || Number(s) > 59 || Number(f) >= Math.ceil(state.fps)) return null;
+  const seconds = Number(h) * 3600 + Number(m) * 60 + Number(s);
+  // First frame that formatFrames shows inside that second (fps like 29.97 are not whole).
+  const firstFrame = Math.ceil(seconds * state.fps - 0.5 - 1e-6);
+  return (firstFrame + Number(f) + 0.5) / state.fps;
 }
 
 function sanitize(text) {
@@ -437,6 +470,9 @@ function setFps(value, source) {
   state.fpsSource = source;
   renderFpsSelect();
   renderInfo();
+  renderInPoint();
+  renderTimecode();
+  render();
   saveMeta();
 }
 
@@ -619,8 +655,8 @@ function removeStored(id) {
 }
 
 function saveMeta() {
-  const { videoName, videoBase, fps, fpsSource } = state;
-  write('meta', (tx) => tx.objectStore('meta').put({ videoName, videoBase, fps, fpsSource }, 'session'));
+  const { videoName, videoBase, fps, fpsSource, inPoint } = state;
+  write('meta', (tx) => tx.objectStore('meta').put({ videoName, videoBase, fps, fpsSource, inPoint }, 'session'));
 }
 
 function replaceStored() {
@@ -653,6 +689,7 @@ async function restore() {
         state.fps = meta.fps;
         state.fpsSource = meta.fpsSource || 'restored';
       }
+      state.inPoint = Number(meta.inPoint) || 0;
     }
     for (const record of records) {
       state.nextId = Math.max(state.nextId, record.id + 1);
@@ -664,6 +701,7 @@ async function restore() {
   }
   renderFpsSelect();
   renderInfo();
+  renderInPoint();
   renderEmpty();
   render();
 }
@@ -672,6 +710,9 @@ async function loadVideo(file) {
   video.src = URL.createObjectURL(file);
   video.hidden = false;
   $('#empty').hidden = true;
+  // Re-opening the same video keeps its in point; a different video starts at 0.
+  if (file.name !== state.videoName) state.inPoint = 0;
+  renderInPoint();
   state.videoName = file.name;
   state.videoBase = file.name.replace(/\.[^.]+$/, '');
   const detected = await detectFps(file);
@@ -685,6 +726,7 @@ async function saveSession() {
     format: 1,
     video: state.videoBase,
     fps: state.fps,
+    inPoint: state.inPoint,
     captures: await Promise.all(state.captures.map(async (c) => ({
       cue: c.cue,
       title: c.title,
@@ -719,6 +761,9 @@ async function openSession(file) {
     state.videoName = '';
   }
   if (session.fps) setFps(session.fps, 'session');
+  state.inPoint = Number(session.inPoint) || 0;
+  renderInPoint();
+  renderTimecode();
   for (const c of session.captures) {
     const blob = dataUrlToBlob(c.image);
     addCapture({
@@ -739,6 +784,8 @@ function clearAll() {
   if (!video.src) {
     state.videoName = '';
     state.videoBase = '';
+    state.inPoint = 0;
+    renderInPoint();
   }
   replaceStored();
   renderInfo();
@@ -981,6 +1028,20 @@ function renderTimecode() {
   $('#timecode').textContent = formatTime(video.currentTime || 0);
 }
 
+function renderInPoint() {
+  const input = $('#in-point');
+  input.value = formatFrames(frameOf(state.inPoint));
+  input.classList.remove('invalid');
+}
+
+function setInPoint(t) {
+  state.inPoint = Math.max(0, t);
+  saveMeta();
+  renderInPoint();
+  renderTimecode();
+  render();
+}
+
 function showView(name) {
   $('#view-capture').hidden = name !== 'capture';
   $('#view-contacts').hidden = name !== 'contacts';
@@ -1044,6 +1105,17 @@ $('#session-input').addEventListener('change', (e) => {
 $('#save-session').addEventListener('click', saveSession);
 $('#download-zip').addEventListener('click', downloadZip);
 $('#clear').addEventListener('click', clearAll);
+$('#set-in').addEventListener('click', () => setInPoint((frameOf(video.currentTime) + 0.5) / state.fps));
+$('#clear-in').addEventListener('click', () => setInPoint(0));
+$('#in-point').addEventListener('change', (e) => {
+  const t = parseTimecode(e.target.value);
+  if (t === null) e.target.classList.add('invalid');
+  else setInPoint(t);
+});
+$('#in-point').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') e.target.blur();
+  else if (e.key === 'Escape') { renderInPoint(); e.target.blur(); }
+});
 $('#tab-capture').addEventListener('click', () => showView('capture'));
 $('#tab-contacts').addEventListener('click', () => showView('contacts'));
 $('#step-back').addEventListener('click', () => stepFrames(-1));
@@ -1057,7 +1129,7 @@ $('#lb-goto').addEventListener('click', () => goToCapture(state.captures[state.l
 $('#lb-close').addEventListener('click', closeLightbox);
 
 video.addEventListener('loadedmetadata', () => {
-  for (const id of ['#step-back', '#step-forward', '#capture']) $(id).disabled = false;
+  for (const id of ['#step-back', '#step-forward', '#capture', '#set-in']) $(id).disabled = false;
   renderInfo();
   renderTimecode();
   render();
@@ -1120,6 +1192,9 @@ window.addEventListener('keydown', (e) => {
   } else if (key === 'c') {
     e.preventDefault();
     capture();
+  } else if (key === 'i') {
+    e.preventDefault();
+    $('#set-in').click();
   }
 }, true);
 
