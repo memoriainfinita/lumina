@@ -21,6 +21,7 @@ Web app to grab frames from a video of a theatre performance and keep a record o
 - L plays forward, each further press speeds up: 1x, 2x, 4x, 8x
 - J steps down: one rate slower while faster than 1x, pause at 1x, one frame back when paused. No reverse playback: Chrome and Firefox do not support it
 - K pauses and resets to 1x
+- Shift+Left/Right jumps 1 s, Ctrl+Left/Right jumps 5 s
 - Frame rate read from the mp4 header; manual selector as fallback and override (variable frame rate videos get an average)
 - In point: I or Set in marks the current frame, or type it as video time (HH:MM:SS.ff); × resets to 0. No out point
 - Show time counts from the in point and starts at 00:00:00.00; negative before it. Used in the timecode, thumbnails, lightbox and zip names

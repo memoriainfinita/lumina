@@ -251,7 +251,7 @@
       </span>
       <label>fps <select id="fps"></select></label>
       <button id="capture" class="primary" title="Capture (C)" disabled>Capture</button>
-      <span class="hint">L play, faster &middot; J slower, pause, frame back &middot; K pause &middot; K+J/L or Left/Right frame &middot; Shift+Left/Right 1 s &middot; I set in &middot; Space play &middot; C capture</span>
+      <span class="hint">L play, faster &middot; J slower, pause, frame back &middot; K pause &middot; K+J/L or Left/Right frame &middot; Shift+Left/Right 1 s &middot; Ctrl+Left/Right 5 s &middot; I set in &middot; Space play &middot; C capture</span>
     </div>
     <div id="strip" class="strip"></div>
   </section>
@@ -1166,14 +1166,18 @@ window.addEventListener('keydown', (e) => {
     return;
   }
 
-  if (typing || $('#view-capture').hidden || !video.duration || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (typing || $('#view-capture').hidden || !video.duration || e.altKey) return;
   const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   if (key === 'ArrowLeft' || key === 'ArrowRight') {
     e.preventDefault();
     const dir = key === 'ArrowLeft' ? -1 : 1;
-    if (e.shiftKey) stepSeconds(dir);
+    if (e.ctrlKey || e.metaKey) stepSeconds(dir * 5);
+    else if (e.shiftKey) stepSeconds(dir);
     else stepFrames(dir);
-  } else if (key === 'j') {
+    return;
+  }
+  if (e.ctrlKey || e.metaKey) return;
+  if (key === 'j') {
     e.preventDefault();
     if (state.kHeld) stepFrames(-1);
     else if (!e.repeat) shuttleBack();
