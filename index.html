@@ -88,11 +88,44 @@
   .strip .thumb { flex: 0 0 auto; width: 220px; }
 
   .thumb {
+    position: relative;
     background: var(--panel);
     border: 1px solid var(--line);
     border-radius: 4px;
     overflow: hidden;
   }
+  .thumb .remove {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    line-height: 1;
+    font-size: 18px;
+    border: 0;
+    background: rgba(0, 0, 0, .6);
+    opacity: .55;
+  }
+  .thumb:hover .remove, .thumb .remove:focus-visible { opacity: 1; }
+  .thumb .remove:hover { color: var(--accent); }
+
+  #toast {
+    position: fixed;
+    left: 50%;
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%);
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    max-width: calc(100vw - 32px);
+    padding: 8px 8px 8px 14px;
+    background: var(--panel);
+    border: 1px solid var(--muted);
+    border-radius: 6px;
+    z-index: 20;
+  }
+  #toast-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .thumb .open {
     display: block;
     width: 100%;
@@ -219,6 +252,11 @@
     <div id="grid" class="grid"></div>
   </section>
 </main>
+
+<div id="toast" hidden>
+  <span id="toast-text"></span>
+  <button id="toast-undo" title="Ctrl+Z">Undo</button>
+</div>
 
 <div id="lightbox" hidden>
   <div class="image"><img id="lb-img" alt=""></div>
@@ -733,6 +771,54 @@ function addCapture(fields) {
 function clearCaptures() {
   for (const c of state.captures) URL.revokeObjectURL(c.url);
   state.captures = [];
+  undoStack.length = 0;
+  hideToast();
+}
+
+// Deleting never asks: every deletion goes on a stack that Undo / Ctrl+Z pops.
+const TOAST_MS = 8000;
+const undoStack = [];
+let toastTimer = 0;
+
+function captureLabel(c) {
+  const cue = c.cue.trim() ? 'Q' + c.cue.trim().replace(/^q\s*/i, '') : '';
+  return [cue, c.title.trim()].filter(Boolean).join(' ') || formatTime(c.time);
+}
+
+function showToast(text) {
+  $('#toast-text').textContent = text;
+  $('#toast').hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(hideToast, TOAST_MS);
+}
+
+function hideToast() {
+  clearTimeout(toastTimer);
+  $('#toast').hidden = true;
+}
+
+function deleteCapture(c) {
+  const index = state.captures.indexOf(c);
+  if (index < 0) return;
+  state.captures.splice(index, 1);
+  URL.revokeObjectURL(c.url);
+  removeStored(c.id);
+  undoStack.push(c);
+  showToast(`Deleted ${captureLabel(c)}`);
+  render();
+}
+
+function undoDelete() {
+  const c = undoStack.pop();
+  if (!c) return;
+  const currentId = state.captures[state.lightbox]?.id;
+  c.url = URL.createObjectURL(c.blob);
+  state.captures.push(c);
+  state.captures.sort((a, b) => a.time - b.time || a.id - b.id);
+  scheduleSave(c, true);
+  hideToast();
+  render();
+  if (state.lightbox >= 0) openLightbox(state.captures.findIndex((x) => x.id === currentId));
 }
 
 async function capture() {
@@ -843,7 +929,13 @@ function thumb(c) {
   time.addEventListener('click', () => goToCapture(c));
   fields.append(time);
 
-  el.append(open, fields);
+  const remove = document.createElement('button');
+  remove.className = 'remove';
+  remove.textContent = '×';
+  remove.title = 'Delete (Ctrl+Z to undo)';
+  remove.addEventListener('click', () => deleteCapture(c));
+
+  el.append(open, remove, fields);
   return el;
 }
 
@@ -923,9 +1015,7 @@ function closeLightbox() {
 function deleteCurrent() {
   const index = state.lightbox;
   if (index < 0) return;
-  const [removed] = state.captures.splice(index, 1);
-  URL.revokeObjectURL(removed.url);
-  removeStored(removed.id);
+  deleteCapture(state.captures[index]);
   if (!state.captures.length) closeLightbox();
   else openLightbox(Math.min(index, state.captures.length - 1));
 }
@@ -980,11 +1070,20 @@ video.addEventListener('ratechange', () => {
 
 // Buttons keep no focus, so Space and arrows always reach the shortcuts.
 document.addEventListener('click', (e) => {
-  if (e.target.closest('header button, .controls button, .thumb button')) e.target.closest('button').blur();
+  if (e.target.closest('header button, .controls button, .thumb button, #toast button')) e.target.closest('button').blur();
 });
+
+$('#toast-undo').addEventListener('click', undoDelete);
 
 window.addEventListener('keydown', (e) => {
   const typing = e.target.matches('input, textarea, select');
+
+  // Ctrl+Z restores the last deleted capture; inside a text field it stays text undo.
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z' && !typing && undoStack.length) {
+    e.preventDefault();
+    undoDelete();
+    return;
+  }
 
   if (state.lightbox >= 0) {
     if (e.key === 'Escape') { e.preventDefault(); closeLightbox(); return; }

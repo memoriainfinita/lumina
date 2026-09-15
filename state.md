@@ -29,7 +29,8 @@ Web app to grab frames from a video of a theatre performance and keep a record o
 - Capture view: video and a strip of captures with editable cue, title and description
 - Contact sheet view: thumbnail grid with editable cue, title and description; notes only in the lightbox
 - Clicking a capture's timestamp, or Go to frame in the lightbox, moves the video to that frame (disabled when no video is loaded)
-- Lightbox: click a thumbnail; arrows to navigate, edit all fields, Delete removes, Esc goes back
+- Lightbox: click a thumbnail; arrows to navigate, edit all fields, Delete key removes, Esc goes back
+- Delete from every view (× on each thumbnail, Delete in the lightbox) without confirmation: an Undo toast shows for 8 s and Ctrl+Z restores deletions one by one during the session. Clear keeps its confirmation
 - Editing = the text fields only. Image retouching is out of scope
 - Download all: zip of images named `Q012.5_title.jpg`; without cue or title, the timestamp fills in
 - Zip written in-house, uncompressed (JPG is already compressed), so the app stays a single file with no dependencies
