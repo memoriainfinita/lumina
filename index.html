@@ -111,7 +111,7 @@
   .thumb:hover .remove, .thumb .remove:focus-visible { opacity: 1; }
   .thumb .remove:hover { color: var(--accent); }
 
-  #help {
+  #options {
     position: fixed;
     inset: 0;
     background: rgba(0, 0, 0, .7);
@@ -121,22 +121,33 @@
     padding: 16px;
     z-index: 30;
   }
-  .help-panel {
+  .options-panel {
     width: 100%;
-    max-width: 560px;
-    max-height: 100%;
-    overflow-y: auto;
+    max-width: 720px;
+    height: min(520px, 100%);
+    display: flex;
+    flex-direction: column;
     background: var(--bg);
     border: 1px solid var(--line);
     border-radius: 6px;
     padding: 12px 20px 20px;
   }
-  .help-head { display: flex; justify-content: space-between; align-items: center; }
-  .help-panel h2 { margin: 0; font-size: 18px; }
-  .help-panel h3 { margin: 16px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); }
-  .help-panel dl { display: grid; grid-template-columns: 11em 1fr; gap: 6px 16px; margin: 0; }
-  .help-panel dt { white-space: nowrap; color: var(--muted); }
-  .help-panel dd { margin: 0; }
+  .options-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .options-panel h2 { margin: 0; font-size: 18px; }
+  .options-body { display: flex; gap: 20px; flex: 1; min-height: 0; }
+  .options-body nav { display: flex; flex-direction: column; gap: 4px; min-width: 9em; }
+  .options-body nav button { text-align: left; }
+  .options-body section { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; }
+  .options-body section[data-section="session"] { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+  .options-panel h3 { margin: 16px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); }
+  .options-panel h3:first-child { margin-top: 0; }
+  .options-panel dl { display: grid; grid-template-columns: 11em 1fr; gap: 6px 16px; margin: 0; }
+  .options-panel dt { white-space: nowrap; color: var(--muted); }
+  .options-panel dd { margin: 0; }
+  @media (max-width: 560px) {
+    .options-body { flex-direction: column; }
+    .options-body nav { flex-direction: row; flex-wrap: wrap; }
+  }
   kbd {
     display: inline-block;
     min-width: 1.8em;
@@ -266,14 +277,10 @@
 <header>
   <span class="brand">lumina</span>
   <button id="open-video">Open video</button>
-  <button id="open-session">Open session</button>
-  <button id="save-session" disabled>Save session</button>
-  <button id="download-zip" disabled>Download all</button>
-  <button id="clear" disabled>Clear</button>
   <span id="storage-warning" hidden>Not saved in this browser: save the session before closing</span>
   <span class="spacer"></span>
   <span id="info"></span>
-  <button id="help-open" title="Shortcuts (?)">?</button>
+  <button id="options-open" title="Options (?)">Options</button>
   <button id="tab-capture" class="active">Capture</button>
   <button id="tab-contacts">Contacts (0)</button>
   <input id="video-input" type="file" accept="video/*" hidden>
@@ -308,12 +315,24 @@
   </section>
 </main>
 
-<div id="help" hidden>
-  <div class="help-panel" role="dialog" aria-labelledby="help-title">
-    <div class="help-head">
-      <h2 id="help-title">Shortcuts</h2>
-      <button id="help-close" title="Close (Esc)">&times;</button>
+<div id="options" hidden>
+  <div class="options-panel" role="dialog" aria-labelledby="options-title">
+    <div class="options-head">
+      <h2 id="options-title">Options</h2>
+      <button id="options-close" title="Close (Esc)">&times;</button>
     </div>
+    <div class="options-body">
+    <nav>
+      <button data-section="session" class="active">Session</button>
+      <button data-section="shortcuts">Shortcuts</button>
+    </nav>
+    <section data-section="session">
+      <button id="open-session">Open session</button>
+      <button id="save-session" disabled>Save session</button>
+      <button id="download-zip" disabled>Download all</button>
+      <button id="clear" disabled>Clear</button>
+    </section>
+    <section data-section="shortcuts" hidden>
     <h3>Playback</h3>
     <dl>
       <dt><kbd>L</kbd></dt><dd>Play forward; press again for 2x, 4x, 8x</dd>
@@ -351,6 +370,8 @@
     <dl>
       <dt><kbd>?</kbd></dt><dd>Show / hide this list</dd>
     </dl>
+    </section>
+    </div>
   </div>
 </div>
 
@@ -1262,33 +1283,51 @@ document.addEventListener('click', (e) => {
 
 $('#toast-undo').addEventListener('click', undoDelete);
 
-function openHelp() {
+let optionsSection = 'session';
+
+function showOptionsSection(name) {
+  optionsSection = name;
+  for (const el of document.querySelectorAll('#options [data-section]')) {
+    if (el.tagName === 'BUTTON') el.classList.toggle('active', el.dataset.section === name);
+    else el.hidden = el.dataset.section !== name;
+  }
+}
+
+function openOptions(section = optionsSection) {
   video.pause();
-  $('#help').hidden = false;
+  showOptionsSection(section);
+  $('#options').hidden = false;
 }
 
-function closeHelp() {
-  $('#help').hidden = true;
+function closeOptions() {
+  if ($('#options').contains(document.activeElement)) document.activeElement.blur();
+  $('#options').hidden = true;
 }
 
-$('#help-open').addEventListener('click', openHelp);
-$('#help-close').addEventListener('click', closeHelp);
-$('#help').addEventListener('click', (e) => {
-  if (e.target === e.currentTarget) closeHelp();
+$('#options-open').addEventListener('click', () => openOptions());
+$('#options-close').addEventListener('click', closeOptions);
+$('#options').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closeOptions();
 });
+for (const button of document.querySelectorAll('#options nav button')) {
+  button.addEventListener('click', () => showOptionsSection(button.dataset.section));
+}
+// Session actions close the panel; their own listeners are registered earlier and run first.
+for (const id of ['#open-session', '#save-session', '#download-zip', '#clear']) {
+  $(id).addEventListener('click', closeOptions);
+}
 
 window.addEventListener('keydown', (e) => {
   const typing = e.target.matches('input, textarea, select');
 
-  // The shortcut list takes every key while open.
-  if (!$('#help').hidden) {
-    if (e.key === 'Escape' || e.key === '?') closeHelp();
-    e.preventDefault();
+  // The options panel keeps the app shortcuts out while open; Tab, Enter and Space still work on its buttons.
+  if (!$('#options').hidden) {
+    if (e.key === 'Escape' || (e.key === '?' && !typing)) { e.preventDefault(); closeOptions(); }
     return;
   }
   if (e.key === '?' && !typing) {
     e.preventDefault();
-    openHelp();
+    openOptions('shortcuts');
     return;
   }
 

@@ -17,7 +17,7 @@ Open `index.html` (or the live page) and drop an mp4 on the window.
 - Download all captures as a zip, named `Q012.5_title.jpg`
 - Save the session as JSON, images included, to reopen it without the video
 
-Press `?` in the app for every shortcut.
+Open Options (or press `?`) for session actions and every shortcut.
 
 ## Storage
 

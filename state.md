@@ -34,7 +34,9 @@ Web app to grab frames from a video of a theatre performance and keep a record o
 - Capture view: video and a strip of captures with editable cue, title and description
 - Contact sheet view: thumbnail grid with editable cue, title and description; notes only in the lightbox. Title and description wrap and the card grows, so no text is cut; the capture strip keeps single-line fields
 - Capture time is read at the moment the frame is drawn, before JPG encoding, so captures taken while playing or seeking are labelled with their own frame
-- Shortcut legend: ? key or the ? button in the header; Esc, ? or a click outside closes it
+- Options panel: one modal with categories in a side menu, fixed size (720 x 520 px max); the content scrolls, the panel does not grow. Opens with the Options button (last section seen) or ? (straight to Shortcuts); Esc, ? or a click outside closes it. App shortcuts are off while open; Tab, Enter and Space work on its buttons
+- Options > Session: Open session, Save session, Download all, Clear. Each action closes the panel. The header keeps only Open video, the storage warning, Options and the view tabs
+- Options > Shortcuts: read-only legend. Custom shortcuts planned for later
 - Favicon: `favicon.svg`, amber spotlight on a dark rounded square, checked rasterized at 16 and 32 px
 - Clicking a capture's timestamp, or Go to frame in the lightbox, moves the video to that frame (disabled when no video is loaded)
 - Lightbox: click a thumbnail; arrows to navigate, edit all fields, Delete key removes, Esc goes back
