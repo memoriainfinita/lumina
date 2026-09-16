@@ -266,7 +266,8 @@
   .options-body nav { display: flex; flex-direction: column; gap: 4px; min-width: 9em; }
   .options-body nav button { text-align: left; }
   .options-body section { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; }
-  .options-body section[data-section="session"] { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+  .options-body section[data-section="session"] .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  #show-name { flex: 1; min-width: 0; max-width: 280px; }
   .options-panel h3 { margin: 16px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); }
   .options-panel h3:first-child { margin-top: 0; }
   .options-panel dl { display: grid; grid-template-columns: 11em 1fr; gap: 6px 16px; margin: 0; }
@@ -441,6 +442,58 @@
   .lb-color { display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: 12px; }
   #lightbox .color-choices .custom { flex-direction: row; align-items: center; }
 
+  /* Cue sheet: only exists on paper. Ink colors, not the app's. */
+  #sheet { display: none; }
+  @media print {
+    @page { size: A4 portrait; margin: 14mm; }
+    body { display: block; height: auto; background: #fff; color: #1c1a17; }
+    body > *:not(#sheet) { display: none !important; }
+    #sheet { display: block; font: 12pt/1.35 system-ui, sans-serif; }
+    #sheet .sheet-head {
+      display: flex;
+      align-items: flex-end;
+      gap: 8mm;
+      padding-bottom: 3mm;
+      margin-bottom: 4mm;
+      border-bottom: 1.5pt solid #1c1a17;
+    }
+    #sheet h1 { margin: 0; font-size: 20pt; line-height: 1.1; }
+    #sheet .sub, #sheet .date { color: #6b665e; font-size: 10pt; }
+    #sheet .date { margin-left: auto; white-space: nowrap; }
+    #sheet .cue { font-weight: 700; color: #8a5a00; font-variant-numeric: tabular-nums; }
+    #sheet .dot { display: inline-block; width: 8pt; height: 8pt; margin-right: 3pt; border-radius: 50%; vertical-align: baseline; }
+    #sheet .time { font-size: 10pt; font-variant-numeric: tabular-nums; }
+    #sheet .title { font-weight: 600; }
+    #sheet .desc { color: #4a463f; text-wrap: pretty; }
+    #sheet .notes { color: #4a463f; font-style: italic; }
+    #sheet img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: contain; background: #000; }
+    #sheet .row {
+      display: grid;
+      grid-template-columns: 10mm 38mm 20mm 1fr 38mm;
+      gap: 4mm;
+      align-items: start;
+      padding: 2.5mm 0;
+      border-bottom: .5pt solid #d9d4ca;
+      break-inside: avoid;
+    }
+    #sheet .row.head {
+      padding-top: 0;
+      border-bottom: 0;
+      font-size: 8pt;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: #6b665e;
+    }
+    #sheet .entries {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 7mm 6mm;
+    }
+    #sheet .entry { display: flex; flex-direction: column; gap: 1.5mm; break-inside: avoid; }
+    #sheet .entry .line { display: flex; gap: 3mm; align-items: baseline; }
+    #sheet .entry .title { flex: 1; min-width: 0; }
+  }
+
   @media (max-width: 700px) {
     #lightbox { flex-direction: column; }
     #lightbox aside { width: auto; max-width: none; border-left: 0; border-top: 1px solid var(--line); }
@@ -513,10 +566,31 @@
       <button data-section="shortcuts">Shortcuts</button>
     </nav>
     <section data-section="session">
-      <button id="open-session">Open session</button>
-      <button id="save-session" disabled>Save session</button>
-      <button id="download-zip" disabled>Download all</button>
-      <button id="clear" disabled>Clear</button>
+      <h3>Session</h3>
+      <div class="actions">
+        <button id="open-session">Open session</button>
+        <button id="save-session" disabled>Save session</button>
+        <button id="download-zip" disabled>Download all</button>
+        <button id="clear" disabled>Clear</button>
+      </div>
+      <h3>Show</h3>
+      <label class="option-row">
+        <span>Show name</span>
+        <input id="show-name" placeholder="Untitled show">
+      </label>
+      <label class="option-row">
+        <span>Date</span>
+        <input id="show-date" type="date">
+      </label>
+      <p class="option-note">Used in the cue sheet header. Saved with the session.</p>
+      <h3>Cue sheet</h3>
+      <div class="option-row">
+        <span>Format</span>
+        <button data-sheet="table">Table</button>
+        <button data-sheet="grid">Grid</button>
+      </div>
+      <p class="option-note">Prints through the browser: pick a printer, or Save as PDF.</p>
+      <button id="print-sheet" disabled>Print cue sheet</button>
     </section>
     <section data-section="layout" hidden>
       <h3>Video and captures</h3>
@@ -596,6 +670,9 @@
 
 <div id="color-menu" hidden></div>
 
+<!-- Filled in right before printing, on paper colors; the print stylesheet hides everything else. -->
+<div id="sheet" aria-hidden="true"></div>
+
 <div id="lightbox" hidden>
   <div class="image">
     <img id="lb-img" alt="">
@@ -652,6 +729,8 @@ const state = {
   lightbox: -1,
   kHeld: false,
   inPoint: 0,        // video time where the performance starts; show time counts from here
+  showName: '',      // show title and date: header of the printed cue sheet
+  showDate: '',
 };
 
 const video = $('#video');
@@ -999,8 +1078,8 @@ function removeStored(id) {
 }
 
 function saveMeta() {
-  const { videoName, videoBase, fps, fpsSource, inPoint, palette } = state;
-  write('meta', (tx) => tx.objectStore('meta').put({ videoName, videoBase, fps, fpsSource, inPoint, palette }, 'session'));
+  const { videoName, videoBase, fps, fpsSource, inPoint, palette, showName, showDate } = state;
+  write('meta', (tx) => tx.objectStore('meta').put({ videoName, videoBase, fps, fpsSource, inPoint, palette, showName, showDate }, 'session'));
 }
 
 function replaceStored() {
@@ -1034,6 +1113,8 @@ async function restore() {
         state.fpsSource = meta.fpsSource || 'restored';
       }
       state.inPoint = Number(meta.inPoint) || 0;
+      state.showName = meta.showName || '';
+      state.showDate = meta.showDate || '';
     }
     if (meta) state.palette = normalizePalette(meta.palette);
     for (const record of records) {
@@ -1048,6 +1129,7 @@ async function restore() {
   renderFpsSelect();
   renderInfo();
   renderInPoint();
+  renderShow();
   renderEmpty();
   render();
 }
@@ -1071,10 +1153,11 @@ async function loadVideo(file) {
 async function saveSession() {
   const session = {
     app: 'lumina',
-    format: 1,
+    format: 2,
     video: state.videoBase,
     fps: state.fps,
     inPoint: state.inPoint,
+    show: { name: state.showName, date: state.showDate },
     palette: state.palette,
     captures: await Promise.all(state.captures.map(async (c) => ({
       cue: c.cue,
@@ -1112,6 +1195,10 @@ async function openSession(file) {
   }
   if (session.fps) setFps(session.fps, 'session');
   state.inPoint = Number(session.inPoint) || 0;
+  // Sessions saved before the cue sheet existed carry no show block.
+  state.showName = session.show?.name || '';
+  state.showDate = session.show?.date || '';
+  renderShow();
   // Sessions saved before colors existed get the default palette.
   state.palette = normalizePalette(session.palette);
   renderPalette();
@@ -1138,7 +1225,10 @@ function clearAll() {
     state.videoName = '';
     state.videoBase = '';
     state.inPoint = 0;
+    state.showName = '';
+    state.showDate = '';
     renderInPoint();
+    renderShow();
   }
   replaceStored();
   renderInfo();
@@ -1576,6 +1666,7 @@ function loadPrefs() {
     layout: saved.layout === 'side' ? 'side' : 'bottom',
     videoHidden: saved.videoHidden === true,
     lbStrip: saved.lbStrip !== false,
+    sheetLayout: saved.sheetLayout === 'grid' ? 'grid' : 'table',
   };
   for (const [key, [min, max, fallback]] of Object.entries(PREF_RANGES)) {
     prefs[key] = Number.isFinite(saved[key]) ? clamp(saved[key], min, max) : fallback;
@@ -1611,6 +1702,9 @@ function applyPrefs() {
   for (const button of document.querySelectorAll('[data-layout]')) {
     button.classList.toggle('active', button.dataset.layout === prefs.layout);
   }
+  for (const button of document.querySelectorAll('[data-sheet]')) {
+    button.classList.toggle('active', button.dataset.sheet === prefs.sheetLayout);
+  }
   const lbToggle = $('#lb-strip-toggle');
   $('#lb-strip').hidden = !prefs.lbStrip;
   lbToggle.classList.toggle('active', prefs.lbStrip);
@@ -1643,6 +1737,7 @@ function render() {
   const has = state.captures.length > 0;
   $('#save-session').disabled = !has;
   $('#download-zip').disabled = !has;
+  $('#print-sheet').disabled = !has;
   $('#clear').disabled = !has;
   $('#count').textContent = `${state.captures.length} ${state.captures.length === 1 ? 'capture' : 'captures'}`;
 }
@@ -1686,6 +1781,97 @@ function setInPoint(t) {
   renderInPoint();
   renderTimecode();
   render();
+}
+
+// ---------- cue sheet ----------
+// Built into #sheet only while printing: the print stylesheet hides the app and lays this out on A4.
+
+function renderShow() {
+  $('#show-name').value = state.showName;
+  $('#show-date').value = state.showDate;
+}
+
+function sheetCue(c) {
+  const cue = c.cue.trim() ? 'Q' + c.cue.trim().replace(/^q\s*/i, '') : '–';
+  const el = document.createElement('span');
+  el.className = 'cue';
+  const color = cssColor(c.color);
+  if (color) {
+    const dot = document.createElement('span');
+    dot.className = 'dot';
+    dot.style.background = color;
+    el.append(dot);
+  }
+  el.append(cue);
+  return el;
+}
+
+function sheetImage(c) {
+  const image = document.createElement('img');
+  image.src = c.url;
+  image.alt = '';
+  return image;
+}
+
+function sheetText(className, text) {
+  const el = document.createElement('div');
+  el.className = className;
+  el.textContent = text;
+  return el;
+}
+
+function sheetHead() {
+  const head = document.createElement('div');
+  head.className = 'sheet-head';
+  const left = document.createElement('div');
+  const title = document.createElement('h1');
+  title.textContent = state.showName || state.videoBase || 'Cue sheet';
+  const parts = ['Lighting states'];
+  if (state.videoBase) parts.push(state.videoBase);
+  parts.push(`${state.fps} fps`);
+  if (state.inPoint) parts.push(`in point ${formatFrames(frameOf(state.inPoint))}`);
+  left.append(title, sheetText('sub', parts.join(' · ')));
+  head.append(left);
+  if (state.showDate) head.append(sheetText('date', state.showDate));
+  return head;
+}
+
+function sheetTableRows() {
+  const head = document.createElement('div');
+  head.className = 'row head';
+  for (const name of ['Cue', 'Frame', 'Time', 'State', 'Notes']) head.append(sheetText('', name));
+  return [head, ...state.captures.map((c) => {
+    const row = document.createElement('div');
+    row.className = 'row';
+    const state_ = document.createElement('div');
+    state_.append(sheetText('title', c.title.trim() || '–'));
+    if (c.description.trim()) state_.append(sheetText('desc', c.description.trim()));
+    row.append(sheetCue(c), sheetImage(c), sheetText('time', formatTime(c.time)), state_, sheetText('notes', c.notes.trim()));
+    return row;
+  })];
+}
+
+function sheetGridEntries() {
+  const entries = document.createElement('div');
+  entries.className = 'entries';
+  for (const c of state.captures) {
+    const entry = document.createElement('div');
+    entry.className = 'entry';
+    const line = document.createElement('div');
+    line.className = 'line';
+    line.append(sheetCue(c), sheetText('title', c.title.trim() || '–'), sheetText('time', formatTime(c.time)));
+    entry.append(sheetImage(c), line);
+    if (c.description.trim()) entry.append(sheetText('desc', c.description.trim()));
+    if (c.notes.trim()) entry.append(sheetText('notes', `Notes: ${c.notes.trim()}`));
+    entries.append(entry);
+  }
+  return [entries];
+}
+
+function printSheet() {
+  if (!state.captures.length) return;
+  $('#sheet').replaceChildren(sheetHead(), ...(prefs.sheetLayout === 'grid' ? sheetGridEntries() : sheetTableRows()));
+  window.print();
 }
 
 // ---------- lightbox ----------
@@ -1857,7 +2043,7 @@ for (const button of document.querySelectorAll('#options nav button')) {
   button.addEventListener('click', () => showOptionsSection(button.dataset.section));
 }
 // Session actions close the panel; their own listeners are registered earlier and run first.
-for (const id of ['#open-session', '#save-session', '#download-zip', '#clear']) {
+for (const id of ['#open-session', '#save-session', '#download-zip', '#print-sheet', '#clear']) {
   $(id).addEventListener('click', closeOptions);
 }
 
@@ -1868,6 +2054,18 @@ for (const button of document.querySelectorAll('[data-layout]')) {
     savePrefs();
   });
 }
+for (const button of document.querySelectorAll('[data-sheet]')) {
+  button.addEventListener('click', () => {
+    prefs.sheetLayout = button.dataset.sheet;
+    applyPrefs();
+    savePrefs();
+  });
+}
+$('#show-name').addEventListener('input', (e) => { state.showName = e.target.value; saveMeta(); });
+$('#show-date').addEventListener('input', (e) => { state.showDate = e.target.value; saveMeta(); });
+$('#print-sheet').addEventListener('click', printSheet);
+// The sheet is only needed while the print dialog is up.
+window.addEventListener('afterprint', () => $('#sheet').replaceChildren());
 $('#thumb-with-video').addEventListener('input', (e) => {
   prefs.thumbWithVideo = Number(e.target.value);
   applyPrefs();
@@ -2052,6 +2250,7 @@ applyPrefs();
 renderPalette();
 renderFpsSelect();
 renderInfo();
+renderShow();
 render();
 restore();
 </script>
