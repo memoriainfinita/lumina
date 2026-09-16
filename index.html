@@ -126,18 +126,21 @@
     border-radius: 4px;
     overflow: hidden;
   }
+  .thumb:hover { border-color: #3a3a3a; }
+  /* Delete and color only show on the card under the pointer: the grid reads as a record, not as a row of controls. */
   .thumb .remove {
     position: absolute;
-    top: 4px;
-    right: 4px;
-    width: 26px;
-    height: 26px;
+    top: 6px;
+    right: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
     padding: 0;
-    line-height: 1;
-    font-size: 18px;
     border: 0;
-    background: rgba(0, 0, 0, .6);
-    opacity: .55;
+    background: rgba(0, 0, 0, .65);
+    opacity: 0;
   }
   .thumb:hover .remove, .thumb .remove:focus-visible { opacity: 1; }
   .thumb .remove:hover { color: var(--accent); }
@@ -145,13 +148,13 @@
     position: absolute;
     right: 6px;
     bottom: 7px;
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
     padding: 0;
     border: 2px solid rgba(255, 255, 255, .7);
     border-radius: 50%;
     background: var(--capture-color, rgba(0, 0, 0, .6));
-    opacity: .55;
+    opacity: 0;
   }
   .thumb:hover .color, .thumb .color:focus-visible, .thumb.colored .color { opacity: 1; }
   /* Time and notes flag sit on the bottom left of the image. */
@@ -173,7 +176,7 @@
     font-size: 12px;
     line-height: 1.5;
   }
-  .thumb .notes-flag { color: var(--accent); cursor: default; }
+  .thumb .notes-flag { display: flex; padding: 3px 5px; color: var(--accent); cursor: default; }
 
   .color-choices { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
   .color-choices .swatch {
@@ -295,12 +298,23 @@
     display: grid;
     grid-template-columns: 5em 1fr;
     align-items: start;
-    gap: 4px;
-    padding: 6px;
+    gap: 2px 8px;
+    padding: 8px 8px 10px;
   }
-  .thumb .fields input, .thumb .fields textarea { width: 100%; min-width: 0; padding: 3px 6px; font-size: 13px; }
+  /* The fields read as text until they are used: the border shows on hover and while editing. */
+  .thumb .fields input, .thumb .fields textarea {
+    width: 100%;
+    min-width: 0;
+    padding: 3px 6px;
+    font-size: 13px;
+    border-color: transparent;
+    background: transparent;
+  }
+  .thumb:hover .fields input, .thumb:hover .fields textarea { border-color: var(--line); }
+  .thumb .fields input:focus, .thumb .fields textarea:focus { border-color: var(--accent); background: var(--bg); }
   .thumb .fields textarea { resize: none; overflow: hidden; line-height: 1.35; }
-  .thumb .fields .description { grid-column: 1 / -1; }
+  .thumb .fields .title { font-size: 14px; }
+  .thumb .fields .description { grid-column: 1 / -1; color: var(--muted); }
   .thumb .cue-box { position: relative; }
   .thumb .cue-box::before {
     content: 'Q';
@@ -310,9 +324,10 @@
     transform: translateY(-50%);
     color: var(--muted);
     font-size: 13px;
+    font-weight: 400;
     pointer-events: none;
   }
-  .thumb .fields .cue { padding-left: 18px; color: var(--accent); font-weight: 600; }
+  .thumb .fields .cue { padding-left: 18px; font-size: 15px; color: var(--accent); font-weight: 600; font-variant-numeric: tabular-nums; }
   .thumb .time { font-variant-numeric: tabular-nums; }
   .thumb .time:hover:not(:disabled) { color: var(--accent); text-decoration: underline; }
   .thumb .time:disabled { opacity: 1; cursor: default; }
@@ -472,7 +487,7 @@
       <dt>Click image</dt><dd>Open in the lightbox</dd>
       <dt>Click time</dt><dd>Move the video to that frame</dd>
       <dt>Dot, bottom right</dt><dd>Pick a color</dd>
-      <dt>&times;</dt><dd>Delete</dd>
+      <dt>&times;, top right</dt><dd>Delete</dd>
       <dt><kbd>Ctrl</kbd> + <kbd>Z</kbd></dt><dd>Undo the last delete</dd>
       <dt><kbd>Enter</kbd></dt><dd>Leave a text field so shortcuts work again</dd>
     </dl>
@@ -1195,6 +1210,37 @@ function autosizeStrip() {
   for (const textarea of document.querySelectorAll('#strip textarea')) autosize(textarea);
 }
 
+// Inline icons on a 16px grid: they take the current color and scale with the text.
+const ICONS = {
+  close: '<path d="M4 4l8 8M12 4l-8 8"/>',
+  note: '<path d="M4 2.5h5.5L12 5v8.5H4z"/><path d="M6 8h4M6 10.5h3"/>',
+  film: '<rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M5 3v10M11 3v10M2 6.5h3M2 9.5h3M11 6.5h3M11 9.5h3"/>',
+  eye: '<path d="M2 8s2.2-4.5 6-4.5S14 8 14 8s-2.2 4.5-6 4.5S2 8 2 8z"/><circle cx="8" cy="8" r="1.8"/>',
+  eyeOff: '<path d="M2 8s2.2-4.5 6-4.5S14 8 14 8s-2.2 4.5-6 4.5S2 8 2 8z"/><circle cx="8" cy="8" r="1.8"/><path d="M3 13L13 3"/>',
+  sliders: '<path d="M3 4.5h6M12 4.5h1M3 11.5h1M7 11.5h6"/><circle cx="10.5" cy="4.5" r="1.5"/><circle cx="5.5" cy="11.5" r="1.5"/>',
+  warning: '<path d="M8 2.5l6 10.5H2z"/><path d="M8 6.5v3M8 11.3v.2"/>',
+  left: '<path d="M10 3.5L5.5 8 10 12.5"/>',
+  right: '<path d="M6 3.5L10.5 8 6 12.5"/>',
+  play: '<path d="M5 3.5v9l7-4.5z"/>',
+  trash: '<path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.7 8.5h5.6l.7-8.5"/>',
+  filmstrip: '<rect x="1.5" y="5" width="13" height="6" rx="1"/><path d="M5.5 5v6M10.5 5v6"/>',
+};
+
+function icon(name, size = 16) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 16 16');
+  svg.setAttribute('width', size);
+  svg.setAttribute('height', size);
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '1.5');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.innerHTML = ICONS[name];
+  return svg;
+}
+
 function thumb(c) {
   const el = document.createElement('div');
   el.className = 'thumb';
@@ -1253,15 +1299,16 @@ function thumb(c) {
   if (c.notes.trim()) {
     const notes = document.createElement('span');
     notes.className = 'notes-flag';
-    notes.textContent = 'Notes';
+    notes.append(icon('note', 12));
     notes.title = c.notes.trim().slice(0, 300);
     badges.append(notes);
   }
 
   const remove = document.createElement('button');
   remove.className = 'remove';
-  remove.textContent = '×';
+  remove.append(icon('close', 14));
   remove.title = 'Delete (Ctrl+Z to undo)';
+  remove.setAttribute('aria-label', 'Delete capture');
   remove.addEventListener('click', () => deleteCapture(c));
 
   const color = document.createElement('button');
