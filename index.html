@@ -141,7 +141,6 @@
     border-top: 1px solid var(--line);
   }
   #timecode { font-variant-numeric: tabular-nums; min-width: 9ch; }
-  .hint { color: var(--muted); font-size: 12px; }
 
   .strip {
     display: grid;
@@ -544,7 +543,6 @@
       </span>
       <label>fps <select id="fps"></select></label>
       <button id="capture" class="primary" title="Capture (C)" disabled>Capture</button>
-      <span class="hint">Press ? for shortcuts</span>
     </div>
     </div>
     <div id="splitter" title="Drag to resize"></div>
@@ -1745,9 +1743,8 @@ function render() {
 function renderEmpty() {
   const resuming = state.captures.length && state.videoName && !video.src;
   $('#empty-title').textContent = resuming ? `Re-open ${state.videoName} to continue` : 'Drop a video here';
-  $('#empty .note').textContent = resuming
-    ? 'The captures are kept in this browser; the video itself is not.'
-    : 'The video stays on this computer. mp4 recommended.';
+  // Nothing under the title while resuming: the captures are already on screen.
+  $('#empty .note').hidden = Boolean(resuming);
 }
 
 function renderFpsSelect() {
