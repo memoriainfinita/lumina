@@ -14,7 +14,8 @@ Open `index.html` (or the live page) and drop an mp4 on the window, or click the
 - Mark the in point with I: show time counts from there and starts at 00:00:00.00
 - Give each capture a cue, title, description, notes and a color from an editable palette
 - Put the captures below or beside the video, drag the bar between them to resize, and hide the video (V) to review the captures full size
-- Open a capture in the lightbox to see it large and edit its notes
+- Open a capture in the lightbox to see it large and edit its notes, with the nearby captures in a strip you can toggle with F
+- Print a cue sheet, as a table or a grid, or save it as PDF from the print dialog
 - Download all captures as a zip, named `Q012.5_title.jpg`
 - Save the session as JSON, images included, to reopen it without the video
 
