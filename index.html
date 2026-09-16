@@ -47,15 +47,36 @@
   header {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 10px;
     align-items: center;
     padding: 8px 12px;
     border-bottom: 1px solid var(--line);
   }
-  header .brand { font-weight: 600; letter-spacing: .05em; margin-right: 8px; }
+  header .brand { font-weight: 600; letter-spacing: .05em; }
+  header .sep { width: 1px; height: 20px; background: var(--line); }
   header .spacer { flex: 1; }
+  header button.icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+  }
   #info, #count { color: var(--muted); }
-  #storage-warning { color: var(--accent); }
+  #info { font-size: 12px; }
+  /* Captures are autosaved, so the header says nothing about storage until there is none. */
+  #storage-warning {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    padding: 2px 8px;
+    border: 1px solid rgba(224, 165, 38, .5);
+    border-radius: 10px;
+    color: var(--accent);
+    font-size: 12px;
+    cursor: default;
+  }
 
   main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   .view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
@@ -380,13 +401,15 @@
 
 <header>
   <span class="brand">lumina</span>
-  <span id="storage-warning" hidden>Not saved in this browser: save the session before closing</span>
-  <span class="spacer"></span>
+  <span class="sep" hidden></span>
+  <span id="video-name"></span>
   <span id="info"></span>
+  <span class="spacer"></span>
+  <span id="storage-warning" title="Nothing is being kept in this browser: save the session before closing the tab" hidden>Not saved in this browser</span>
   <span id="count"></span>
-  <button id="open-video">Open video</button>
-  <button id="options-open" title="Options (?)">Options</button>
-  <button id="toggle-video" title="Hide the video (V)">Hide video</button>
+  <button id="open-video" class="icon" title="Open video" aria-label="Open video"></button>
+  <button id="toggle-video" class="icon" title="Hide the video (V)" aria-label="Hide the video"></button>
+  <button id="options-open" class="icon" title="Options (?)" aria-label="Options"></button>
   <input id="video-input" type="file" accept="video/*" hidden>
   <input id="session-input" type="file" accept=".json,application/json" hidden>
 </header>
@@ -1511,8 +1534,9 @@ function applyPrefs() {
   $('#capture-main').hidden = prefs.videoHidden;
   $('#splitter').hidden = prefs.videoHidden;
   const toggle = $('#toggle-video');
-  toggle.textContent = prefs.videoHidden ? 'Show video' : 'Hide video';
+  toggle.replaceChildren(icon(prefs.videoHidden ? 'eye' : 'eyeOff'));
   toggle.title = `${prefs.videoHidden ? 'Show' : 'Hide'} the video (V)`;
+  toggle.setAttribute('aria-label', `${prefs.videoHidden ? 'Show' : 'Hide'} the video`);
   for (const button of document.querySelectorAll('[data-layout]')) {
     button.classList.toggle('active', button.dataset.layout === prefs.layout);
   }
@@ -1560,8 +1584,9 @@ function renderFpsSelect() {
 }
 
 function renderInfo() {
+  $('#video-name').textContent = state.videoBase;
+  $('header .sep').hidden = !state.videoBase;
   const parts = [];
-  if (state.videoBase) parts.push(state.videoBase);
   if (video.videoWidth) parts.push(`${video.videoWidth}×${video.videoHeight}`);
   parts.push(`${state.fps} fps (${state.fpsSource})`);
   $('#info').textContent = parts.join(' · ');
@@ -1893,6 +1918,10 @@ window.addEventListener('beforeunload', (e) => {
     e.returnValue = '';
   }
 });
+
+$('#open-video').append(icon('film'));
+$('#options-open').append(icon('sliders'));
+$('#storage-warning').prepend(icon('warning', 12));
 
 applyPrefs();
 renderPalette();
