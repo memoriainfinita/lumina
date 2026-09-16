@@ -112,10 +112,25 @@
     position: relative;
   }
   #stage video { max-width: 100%; max-height: 100%; }
-  #empty { color: var(--muted); text-align: center; padding: 24px; }
-  /* No video yet: the whole stage opens the file dialog. */
+  #empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    max-width: 520px;
+    padding: 32px;
+    border: 1px dashed #3a3a3a;
+    border-radius: 8px;
+    color: var(--muted);
+    text-align: center;
+  }
+  #empty .empty-icon { display: flex; }
+  #empty-title { color: var(--text); font-size: 16px; }
+  #empty .actions { display: flex; gap: 8px; }
+  #empty .note { font-size: 12px; text-wrap: pretty; }
+  /* No video yet: the stage around the box opens the file dialog too. */
   #stage.no-video { cursor: pointer; }
-  #stage.no-video:hover #empty { color: var(--text); }
+  #stage.no-video:hover #empty { border-color: var(--muted); }
 
   .controls {
     display: flex;
@@ -418,7 +433,15 @@
   <section id="view-capture" class="view">
     <div id="capture-main">
     <div id="stage" class="no-video">
-      <div id="empty">Click or drop an mp4 here</div>
+      <div id="empty">
+        <span class="empty-icon"></span>
+        <span id="empty-title">Drop a video here</span>
+        <span class="actions">
+          <button id="empty-open" class="primary">Open video</button>
+          <button id="empty-session">Open session</button>
+        </span>
+        <span class="note">The video stays on this computer. mp4 recommended.</span>
+      </div>
       <video id="video" controls hidden></video>
     </div>
     <div class="controls">
@@ -1560,7 +1583,7 @@ function render() {
   if (!state.captures.length) {
     const empty = document.createElement('div');
     empty.className = 'empty';
-    empty.textContent = 'No captures yet.';
+    empty.textContent = 'Captures appear here. Press C to capture the current frame.';
     strip.append(empty);
   }
   autosizeStrip();
@@ -1572,9 +1595,11 @@ function render() {
 }
 
 function renderEmpty() {
-  $('#empty').textContent = state.captures.length && state.videoName && !video.src
-    ? `Re-open ${state.videoName} to continue`
-    : 'Click or drop an mp4 here';
+  const resuming = state.captures.length && state.videoName && !video.src;
+  $('#empty-title').textContent = resuming ? `Re-open ${state.videoName} to continue` : 'Drop a video here';
+  $('#empty .note').textContent = resuming
+    ? 'The captures are kept in this browser; the video itself is not.'
+    : 'The video stays on this computer. mp4 recommended.';
 }
 
 function renderFpsSelect() {
@@ -1654,9 +1679,13 @@ for (const field of TEXT_FIELDS) {
 // ---------- events ----------
 
 $('#open-video').addEventListener('click', () => $('#video-input').click());
-$('#stage').addEventListener('click', () => {
+$('#stage').addEventListener('click', (e) => {
+  // The buttons inside the empty box have their own actions.
+  if (e.target.closest('button')) return;
   if (!video.src) $('#video-input').click();
 });
+$('#empty-open').addEventListener('click', () => $('#video-input').click());
+$('#empty-session').addEventListener('click', () => $('#session-input').click());
 $('#open-session').addEventListener('click', () => $('#session-input').click());
 $('#video-input').addEventListener('change', (e) => {
   if (e.target.files[0]) loadVideo(e.target.files[0]);
@@ -1919,6 +1948,7 @@ window.addEventListener('beforeunload', (e) => {
   }
 });
 
+$('#empty .empty-icon').append(icon('film', 32));
 $('#open-video').append(icon('film'));
 $('#options-open').append(icon('sliders'));
 $('#storage-warning').prepend(icon('warning', 12));
