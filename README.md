@@ -6,6 +6,8 @@ Grab frames from a video of a theatre performance and keep a record of the show'
 
 A single HTML file with no server, no install and no dependencies. The video never leaves your machine.
 
+![lumina with a video loaded: the stage above and the captured lighting states below, each with its cue number and name](docs/lumina-demo.png)
+
 ## Use
 
 Open `index.html` (or the live page) and drop an mp4 on the window, or click the empty stage.
@@ -34,3 +36,7 @@ Tested with Chrome. Firefox is in daily use. Reverse playback is not available: 
 ## License
 
 [GNU GPL v3](LICENSE)
+
+## Credits
+
+Developed by [@memoriainfinita](https://github.com/memoriainfinita) with the assistance of Claude (Anthropic).
