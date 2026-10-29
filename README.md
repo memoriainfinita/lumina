@@ -2,7 +2,7 @@
 
 Grab frames from a video of a theatre performance and keep a record of the show's lighting states.
 
-**Live:** https://memoriainfinita.github.io/lumina/
+**Live:** https://memoriainfinita.github.io/lumina/ · **Guide:** [how to use it](docs/guide/README.md)
 
 A single HTML file with no server, no install and no dependencies. The video never leaves your machine.
 
