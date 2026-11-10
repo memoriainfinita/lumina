@@ -14,6 +14,7 @@ Web app to grab frames from a video of a theatre performance and keep a record o
 `lumina`: Latin for "lights". Discarded: `lux`, `lumen`, `vestigium`, `tabella`, `lucerna`, `luminaria`, `scaena`.
 
 ## Design
+- Design canvas with the interface proposals of September 2026, chosen and discarded: https://claude.ai/artifact/SSg31mfK8gMCdBJ8cGUwPe
 - Single HTML file, no server, no install. The video never leaves the machine
 - UI, code and documentation in English
 - Load an mp4 and play it with standard controls: Open video in the header, drop it on the window, or click the empty stage (only while no video is loaded, so clicks on the video still reach its controls)
